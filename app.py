@@ -75,24 +75,24 @@ def initiate_download():
 
 @app.route('/download-file', methods=['GET'])
 def download_file():
-    token_sent = request.args.get('token')
-    token_session = session.get('download_token')
-    token_uses = session.get('token_uses', 0)
-    token_expiry = session.get('token_expiry', 0)
-
-    if datetime.now().timestamp() > token_expiry or token_sent != token_session or token_uses >= 3:
-        return jsonify({"error": "Unauthorized access or token expired"}), 403
-    
-    session['token_uses'] = token_uses + 1
-    
-    filename = session.get('filename', None)
-    if not filename:
-        return jsonify({"error": "File information not found"}), 400
-
     try:
-        response = s3_client.generate_presigned_url('get_object', Params={'Bucket': S3_BUCKET, 'Key': filename}, ExpiresIn=3600)
+        token_sent = request.args.get('token')
+        token_session = session.get('download_token')
+        if not token_sent or token_sent != token_session:
+            raise ValueError("Token mismatch or expired")
+
+        filename = session.get('filename')
+        if not filename:
+            raise ValueError("Filename not found in session")
+
+        response = s3_client.generate_presigned_url(
+            'get_object',
+            Params={'Bucket': S3_BUCKET, 'Key': filename},
+            ExpiresIn=3600
+        )
         return redirect(response)
     except Exception as e:
+        app.logger.error(f"Error downloading file: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
