@@ -1,16 +1,25 @@
 from flask import Flask, session, request, jsonify, render_template_string, send_from_directory, redirect, url_for
-from flask_session import Session
+from flask_session import Session # Import Session for server-side sessions
 from datetime import datetime, timedelta
 import re, secrets, os, boto3, logging
 
 app = Flask(__name__)
-app.secret_key = os.urandom(24)
 
-logging.basicConfig(level=logging.INFO)
-app.logger.addHandler(logging.StreamHandler())
+# Configure session to use filesystem (not default, which uses signed cookies)
+app.config['SESSION_TYPE'] = 'filesystem'
+app.config['SESSION_FILE_DIR'] = './.flask_session/'
+app.config['SECRET_KEY'] = os.urandom(24)  # Use a secure random key
 
+# Initialize Session
+Session(app)
+
+# Configure S3 client
 s3_client = boto3.client('s3')
 S3_BUCKET = 'flask-assignment-server-bucket'
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+app.logger.addHandler(logging.StreamHandler())
 
 def generate_secure_token():
     return secrets.token_urlsafe()
