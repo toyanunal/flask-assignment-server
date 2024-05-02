@@ -51,8 +51,6 @@ def initiate_download():
     filename = f'ASSIGNMENT_{hw_number}_{ext_user_username[1:]}.zip'
     session['filename'] = filename
 
-    #download_url = url_for('download_file', token=token)
-
     html_content = f'''
     <!DOCTYPE html>
     <html lang="en">
@@ -90,8 +88,11 @@ def download_file():
     try:
         token_sent = request.args.get('token')
         token_session = session.get('download_token')
-        if not token_sent or token_sent != token_session:
-            raise ValueError("Token mismatch or expired")
+        token_uses = session.get('token_uses', 0)
+        if not token_sent or token_sent != token_session or token_uses >= 3:
+            raise ValueError("Unauthorized access or too many downloads")
+        
+        session['token_uses'] = token_uses + 1
 
         filename = session.get('filename')
         if not filename:
@@ -103,6 +104,9 @@ def download_file():
             ExpiresIn=3600
         )
         return redirect(response)
+    except ValueError as ve:
+        app.logger.error(f"Access error: {str(ve)}")
+        return jsonify({"error": str(ve)}), 403
     except Exception as e:
         app.logger.error(f"Error downloading file: {str(e)}")
         return jsonify({"error": str(e)}), 500
