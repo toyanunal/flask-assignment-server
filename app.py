@@ -43,7 +43,7 @@ def initiate_download():
         return jsonify({"error": "Assignment number not correctly provided"}), 400
     
     ext_user_username = request.form.get('ext_user_username')
-    ext_user_username = "e073281" ########## Change this ##########
+    #ext_user_username = "e073281" ########## Change this ##########
     if not ext_user_username:
         return jsonify({"error": "Username not provided"}), 400
     session['ext_user_username'] = ext_user_username
