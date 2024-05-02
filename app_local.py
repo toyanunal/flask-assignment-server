@@ -1,24 +1,24 @@
-from flask import Flask, session, request, jsonify, render_template_string, send_from_directory, redirect, url_for
-from flask_session import Session
+from flask import Flask, session, request, jsonify, render_template_string, send_from_directory
 from datetime import datetime, timedelta
-import re, secrets, os, boto3
+import re, secrets, os
 
 app = Flask(__name__)
-app.secret_key = os.urandom(24)
-
-s3_client = boto3.client('s3')
-S3_BUCKET = 'flask-assignment-server-bucket'
+app.secret_key = 'testing' ########## Change this ##########
 
 def generate_secure_token():
     return secrets.token_urlsafe()
 
 def extract_number(text):
+    # Find all groups of digits in the text
     numbers = re.findall(r'\d+', text)
-    return numbers[0] if numbers else None
+    if numbers:
+        return numbers[0]  # Return the first number found
+    return None
 
 @app.route('/initiate-download', methods=['POST'])
 def initiate_download():
     #return request.form
+
     token = generate_secure_token()
     session['download_token'] = token
     session['token_expiry'] = (datetime.now() + timedelta(minutes=1)).timestamp()
@@ -39,7 +39,8 @@ def initiate_download():
     filename = f'ASSIGNMENT_{hw_number}_{ext_user_username[1:]}.zip'
     session['filename'] = filename
 
-    #download_url = url_for('download_file', token=token)
+    directory = '/Users/toyanunal/Downloads/Docs/flask-assignment-server'
+    session['directory'] = directory
 
     html_content = f'''
     <!DOCTYPE html>
@@ -64,7 +65,7 @@ def initiate_download():
             }}
             window.onload = initiateDownload;
         </script>
-        <p>You will be redirected back in 5 seconds.</p>
+        <p>You will be redirected back in 5 seconds.</p> 
         <p>If your download does not start, <a href="/download-file?token={token}">click here</a>.</p>
         <p>To return to the previous page, <a href="javascript:history.back()">click here</a>.</p>
         <p>To return to the ODTUClass, <a href="https://odtuclass.metu.edu.tr/">click here</a>.</p>
@@ -80,21 +81,29 @@ def download_file():
     token_uses = session.get('token_uses', 0)
     token_expiry = session.get('token_expiry', 0)
 
-    if datetime.now().timestamp() > token_expiry or token_sent != token_session or token_uses >= 3:
-        return jsonify({"error": "Unauthorized access or token expired"}), 403
+    # Check token expiry
+    if datetime.now().timestamp() > token_expiry:
+        return jsonify({"error": "Token expired"}), 403
+
+    # Check token validity and uses
+    if not token_sent or token_sent != token_session or token_uses >= 3:
+        return jsonify({"error": "Unauthorized access"}), 403
     
+    # Increment the use counter
     session['token_uses'] = token_uses + 1
     
     filename = session.get('filename', None)
-    if not filename:
+    directory = session.get('directory', None)
+    if not filename or not directory:
         return jsonify({"error": "File information not found"}), 400
 
     try:
-        response = s3_client.generate_presigned_url('get_object', Params={'Bucket': S3_BUCKET, 'Key': filename}, ExpiresIn=3600)
-        return redirect(response)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return send_from_directory(directory, filename, as_attachment=True)
+    except FileNotFoundError:
+        return jsonify({"error": "File not found"}), 404
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', debug=True)
+    app.run(debug=True)
+    #port = int(os.environ.get("PORT", 5000))
+    #app.run(host='0.0.0.0', port=port)
 
