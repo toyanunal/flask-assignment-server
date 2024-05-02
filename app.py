@@ -1,10 +1,13 @@
 from flask import Flask, session, request, jsonify, render_template_string, send_from_directory, redirect, url_for
 from flask_session import Session
 from datetime import datetime, timedelta
-import re, secrets, os, boto3
+import re, secrets, os, boto3, logging
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
+
+logging.basicConfig(level=logging.INFO)
+app.logger.addHandler(logging.StreamHandler())
 
 s3_client = boto3.client('s3')
 S3_BUCKET = 'flask-assignment-server-bucket'
