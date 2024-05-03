@@ -39,14 +39,20 @@ def initiate_download():
     custom_hw = request.form.get('custom_hw')
     resource_link_title = request.form.get('resource_link_title')
     hw_number = extract_number(custom_hw) if custom_hw else extract_number(resource_link_title)
+    
     if not hw_number:
         return jsonify({"error": "Assignment number not correctly provided"}), 400
     
     ext_user_username = request.form.get('ext_user_username')
-    #ext_user_username = "e073281" ########## Change this ##########
+    #ext_user_username = "e073281" ########## Use for debugging purposes ##########
+    
     if not ext_user_username:
         return jsonify({"error": "Username not provided"}), 400
     session['ext_user_username'] = ext_user_username
+
+    # check if first character is 'e' and the rest are digits
+    if not re.match(r'^e\d+$', ext_user_username):
+        return jsonify({"error": "Invalid username format"}), 400
     
     filename = f'ASSIGNMENT_{hw_number}_{ext_user_username[1:]}.zip'
     session['filename'] = filename
