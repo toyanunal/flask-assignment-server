@@ -56,7 +56,7 @@ Flask Assignment Server is a web application built using Flask to manage assignm
 2. Run the application:
 
     ```sh
-    python app.py
+    python3 app.py
     ```
 
 ## Directory Structure
