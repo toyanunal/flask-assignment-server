@@ -9,7 +9,7 @@ Flask Assignment Server is a web application built using Flask to manage assignm
 - [Features](#features)
 - [Installation](#installation)
 - [Usage](#usage)
-- [File Structure](#file-structure)
+- [Directory Structure](#directory-structure)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -59,17 +59,17 @@ Flask Assignment Server is a web application built using Flask to manage assignm
     python app/app.py
     ```
 
-## File Structure
+## Directory Structure
 
 ```
 flask-assignment-server/
-├── .flask_session
+├── .flask_session/
+├── keys/
 ├── .gitignore
+├── app.py
 ├── LICENSE
 ├── Procfile
 ├── README.md
-├── app.py
-├── keys/
 └── requirements.txt
 ```
 
