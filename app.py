@@ -251,7 +251,7 @@ def download_file():
     )
 
     # Post-erase the temp and output folders in S3
-    delete_s3_folder(S3_BUCKET, 'temp/')
-    delete_s3_folder(S3_BUCKET, 'output/')
+    # delete_s3_folder(S3_BUCKET, 'temp/')
+    # delete_s3_folder(S3_BUCKET, 'output/')
 
     return redirect(response)
