@@ -276,6 +276,8 @@ def download_file():
         ExpiresIn=3600
     )
 
+    app.logger.info(f"Cleaning up temp directory in S3")
+    delete_s3_folder(S3_BUCKET, 'temp/')
+    
     app.logger.info(f"Presigned URL generated for {s3_output_key}")
-
     return redirect(response)
