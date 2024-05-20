@@ -128,7 +128,7 @@ def create_zip(ext_user_username, hw_number):
     
     try:
         # Determine source directory on S3 based on hw_number
-        s3_src_dir = f'assignment{hw_number}_files/'
+        s3_src_dir = f'assignment{hw_number}_files'
         
         # Determine the specific files to download and process
         if hw_number == '1':
