@@ -23,12 +23,15 @@ logging.basicConfig(level=logging.INFO)
 app.logger.addHandler(logging.StreamHandler())
 
 def download_file_from_s3(bucket, key, download_path):
+    app.logger.info(f"Downloading {key} from S3 bucket {bucket} to {download_path}")
     s3_client.download_file(bucket, key, download_path)
 
 def upload_file_to_s3(bucket, key, file_path):
+    app.logger.info(f"Uploading {file_path} to S3 bucket {bucket} at {key}")
     s3_client.upload_file(file_path, bucket, key)
 
 def delete_s3_folder(bucket, prefix):
+    app.logger.info(f"Deleting files in S3 bucket {bucket} with prefix {prefix}")
     s3 = boto3.resource('s3')
     bucket = s3.Bucket(bucket)
     bucket.objects.filter(Prefix=prefix).delete()
@@ -41,6 +44,8 @@ def extract_number(text):
     return numbers[0] if numbers else None
 
 def embed_hidden_info_docx(docx_path, ext_user_username, temp_dir, new_docx_path):
+    app.logger.info(f"Embedding hidden info in DOCX file {docx_path}")
+
     # Extract the contents of the docx file to the temporary directory
     with zipfile.ZipFile(docx_path, 'r') as zip_ref:
         zip_ref.extractall(temp_dir)
@@ -73,6 +78,8 @@ def embed_hidden_info_docx(docx_path, ext_user_username, temp_dir, new_docx_path
     return new_docx_path
 
 def embed_hidden_info_xlsx(xlsx_path, ext_user_username, temp_dir, new_xlsx_path):
+    app.logger.info(f"Embedding hidden info in XLSX file {xlsx_path}")
+
     # Extract the contents of the xlsx file to the temporary directory
     with zipfile.ZipFile(xlsx_path, 'r') as zip_ref:
         zip_ref.extractall(temp_dir)
@@ -112,7 +119,8 @@ def create_zip(ext_user_username, hw_number):
     output_dir = 'output/'
     s3_src_dir = f'assignment{hw_number}_files/'
 
-    # Pre-erase the temp and output folders in S3
+    # Pre clean-up
+    app.logger.info("Pre clean-up of temp and output directories in S3")
     delete_s3_folder(S3_BUCKET, temp_dir)
     delete_s3_folder(S3_BUCKET, output_dir)
     
@@ -164,6 +172,7 @@ def create_zip(ext_user_username, hw_number):
     # Upload the ZIP file to S3 output directory
     zip_filepath = os.path.join(output_dir, 'output.zip')
     s3_output_key = os.path.join(output_dir, f'ASSIGNMENT_{hw_number}_{ext_user_username[1:]}.zip')
+    app.logger.info(f"Uploading ZIP file {zip_filepath} to S3 at {s3_output_key}")
     s3_client.upload_file(zip_filepath, S3_BUCKET, s3_output_key)
 
     return s3_output_key
@@ -191,11 +200,15 @@ def initiate_download():
     if not re.match(r'^e\d+$', ext_user_username):
         return jsonify({"error": "Invalid username format"}), 400
 
-    s3_output_key = create_zip(ext_user_username, hw_number)
-    if s3_output_key:
-        session['filename'] = s3_output_key
-    else:
-        return jsonify({"error": "Failed to create zip file"}), 500
+    try:
+        s3_output_key = create_zip(ext_user_username, hw_number)
+        if s3_output_key:
+            session['filename'] = s3_output_key
+        else:
+            return jsonify({"error": "Failed to create zip file"}), 500
+    except Exception as e:
+        app.logger.error(f"Error creating zip file: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
     token = generate_secure_token()
     html_content = f'''
@@ -250,8 +263,9 @@ def download_file():
         ExpiresIn=3600
     )
 
-    # Post-erase the temp and output folders in S3
-    # delete_s3_folder(S3_BUCKET, 'temp/')
-    # delete_s3_folder(S3_BUCKET, 'output/')
+    # Post clean-up
+    app.logger.info("Pre clean-up of temp and output directories in S3")
+    delete_s3_folder(S3_BUCKET, 'temp/')
+    delete_s3_folder(S3_BUCKET, 'output/')
 
     return redirect(response)
