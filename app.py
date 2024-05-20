@@ -25,16 +25,19 @@ app.logger.addHandler(logging.StreamHandler())
 def download_file_from_s3(bucket, key, download_path):
     app.logger.info(f"Downloading {key} from S3 bucket {bucket} to {download_path}")
     s3_client.download_file(bucket, key, download_path)
+    app.logger.info(f"Downloaded {key} to {download_path}")
 
 def upload_file_to_s3(bucket, key, file_path):
     app.logger.info(f"Uploading {file_path} to S3 bucket {bucket} at {key}")
     s3_client.upload_file(file_path, bucket, key)
+    app.logger.info(f"Uploaded {file_path} to {key} in S3 bucket {bucket}")
 
 def delete_s3_folder(bucket, prefix):
     app.logger.info(f"Deleting files in S3 bucket {bucket} with prefix {prefix}")
     s3 = boto3.resource('s3')
     bucket = s3.Bucket(bucket)
     bucket.objects.filter(Prefix=prefix).delete()
+    app.logger.info(f"Deleted files with prefix {prefix} in S3 bucket {bucket}")
 
 def generate_secure_token():
     return secrets.token_urlsafe()
@@ -49,6 +52,7 @@ def embed_hidden_info_docx(docx_path, ext_user_username, temp_dir, new_docx_path
     # Extract the contents of the docx file to the temporary directory
     with zipfile.ZipFile(docx_path, 'r') as zip_ref:
         zip_ref.extractall(temp_dir)
+        app.logger.info(f"Extracted DOCX file {docx_path} to {temp_dir}")
 
     # Path to the custom XML part
     custom_xml_path = os.path.join(temp_dir, 'customXml/item1.xml')
@@ -66,6 +70,7 @@ def embed_hidden_info_docx(docx_path, ext_user_username, temp_dir, new_docx_path
     tree = etree.ElementTree(root)
     with open(custom_xml_path, 'wb') as xml_file:
         tree.write(xml_file, xml_declaration=True, encoding='UTF-8')
+        app.logger.info(f"Written hidden info to {custom_xml_path}")
 
     # Create a new docx file with the modified contents
     with zipfile.ZipFile(new_docx_path, 'w') as zip_ref:
@@ -74,6 +79,7 @@ def embed_hidden_info_docx(docx_path, ext_user_username, temp_dir, new_docx_path
                 file_path = os.path.join(folder_name, filename)
                 arcname = os.path.relpath(file_path, temp_dir)
                 zip_ref.write(file_path, arcname)
+                app.logger.info(f"Added {file_path} to {new_docx_path}")
 
     return new_docx_path
 
