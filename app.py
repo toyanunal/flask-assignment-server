@@ -144,12 +144,12 @@ def create_zip(ext_user_username, hw_number):
         copy_file_in_s3(S3_BUCKET, pdf_key, pdf_dst_key)
 
         new_docx_key = f'{output_dir}IS100_Assignment{hw_number}_{ext_user_username[1:]}.docx'
-        modified_docx_key = embed_hidden_info_docx(doc_dst_key, ext_user_username, temp_dir, new_docx_key)
+        modified_docx_key = embed_hidden_info_docx(doc_dst_key, ext_user_username, new_docx_key)
 
         zip_buffer = io.BytesIO()
         with zipfile.ZipFile(zip_buffer, 'w') as zipf:
-            zipf.write(modified_docx_key, new_docx_key)
-            zipf.write(pdf_dst_key, pdf_dst_key)
+            zipf.writestr(new_docx_key, modified_docx_key)
+            zipf.writestr(pdf_dst_key, pdf_dst_key)
             app.logger.info(f"Created ZIP file with {modified_docx_key} and {pdf_dst_key}")
         zip_buffer.seek(0)
 
@@ -165,12 +165,12 @@ def create_zip(ext_user_username, hw_number):
         copy_file_in_s3(S3_BUCKET, txt_key, txt_dst_key)
 
         new_xlsx_key = f'{output_dir}IS100_Assignment{hw_number}_{ext_user_username[1:]}.xlsx'
-        modified_xlsx_key = embed_hidden_info_xlsx(xlsx_dst_key, ext_user_username, temp_dir, new_xlsx_key)
+        modified_xlsx_key = embed_hidden_info_xlsx(xlsx_dst_key, ext_user_username, new_xlsx_key)
 
         zip_buffer = io.BytesIO()
         with zipfile.ZipFile(zip_buffer, 'w') as zipf:
-            zipf.write(modified_xlsx_key, new_xlsx_key)
-            zipf.write(txt_dst_key, txt_dst_key)
+            zipf.writestr(new_xlsx_key, modified_xlsx_key)
+            zipf.writestr(txt_dst_key, txt_dst_key)
             app.logger.info(f"Created ZIP file with {modified_xlsx_key} and {txt_dst_key}")
         zip_buffer.seek(0)
 
