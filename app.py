@@ -265,7 +265,7 @@ def download_file():
 
     # Post clean-up
     app.logger.info("Pre clean-up of temp and output directories in S3")
-    delete_s3_folder(S3_BUCKET, 'temp/')
-    delete_s3_folder(S3_BUCKET, 'output/')
+    #delete_s3_folder(S3_BUCKET, 'temp/')
+    #delete_s3_folder(S3_BUCKET, 'output/')
 
     return redirect(response)
