@@ -149,9 +149,9 @@ def create_zip(ext_user_username, hw_number):
     if hw_number == '1':
         doc_src_path = os.path.join(temp_dir, f'IS100_Assignment{hw_number}_Type{random_number}_Text.docx')
         pdf_src_path = os.path.join(temp_dir, f'IS100_Assignment{hw_number}_Type{random_number}_Question.pdf')
-        app.logger.info(f"Attempting to download DOCX file: {doc_key} to {doc_dst}")
+        app.logger.info(f"Attempting to download DOCX file: {doc_key} to {doc_src_path}")
         s3_client.download_file(S3_BUCKET, doc_key, doc_src_path)
-        app.logger.info(f"Attempting to download PDF file: {pdf_key} to {pdf_dst}")
+        app.logger.info(f"Attempting to download PDF file: {pdf_key} to {pdf_src_path}")
         s3_client.download_file(S3_BUCKET, pdf_key, pdf_src_path)
         app.logger.info(f"Downloaded DOCX file to {doc_src_path} and PDF file to {pdf_src_path}")
     elif hw_number == '2':
