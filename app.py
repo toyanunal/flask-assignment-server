@@ -251,13 +251,23 @@ def download_file():
     token_sent = request.args.get('token')
     token_session = session.get('download_token')
     token_uses = session.get('token_uses', 0)
-    if not token_sent or token_sent != token_session or token_uses >= 3:
+
+    # Add logging to debug token and download count
+    app.logger.info(f"Token sent: {token_sent}, Token in session: {token_session}, Token uses: {token_uses}")
+
+    if not token_sent or token_sent != token_session:
+        app.logger.error("Token validation failed.")
+        raise ValueError("Unauthorized access or too many downloads")
+
+    if token_uses >= 3:
+        app.logger.error("Too many downloads.")
         raise ValueError("Unauthorized access or too many downloads")
     
     session['token_uses'] = token_uses + 1
 
     s3_output_key = session.get('filename')
     if not s3_output_key:
+        app.logger.error("Filename not found in session")
         raise ValueError("Filename not found in session")
 
     response = s3_client.generate_presigned_url(
@@ -266,9 +276,6 @@ def download_file():
         ExpiresIn=3600
     )
 
-    # Post clean-up
-    app.logger.info("Post clean-up of temp and output directories in S3")
-    #delete_s3_folder(S3_BUCKET, 'temp/')
-    #delete_s3_folder(S3_BUCKET, 'output/')
+    app.logger.info(f"Presigned URL generated for {s3_output_key}")
 
     return redirect(response)
