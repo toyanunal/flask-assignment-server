@@ -89,6 +89,7 @@ def embed_hidden_info_xlsx(xlsx_path, ext_user_username, temp_dir, new_xlsx_path
     # Extract the contents of the xlsx file to the temporary directory
     with zipfile.ZipFile(xlsx_path, 'r') as zip_ref:
         zip_ref.extractall(temp_dir)
+        app.logger.info(f"Extracted XLSX file {xlsx_path} to {temp_dir}")
 
     # Path to the workbook XML part
     workbook_xml_path = os.path.join(temp_dir, 'xl/workbook.xml')
@@ -108,6 +109,7 @@ def embed_hidden_info_xlsx(xlsx_path, ext_user_username, temp_dir, new_xlsx_path
 
     # Write the hidden info to the workbook XML file
     tree.write(workbook_xml_path, xml_declaration=True, encoding='UTF-8')
+    app.logger.info(f"Written hidden info to {workbook_xml_path}")
 
     # Create a new xlsx file with the modified contents
     with zipfile.ZipFile(new_xlsx_path, 'w') as zip_ref:
@@ -116,6 +118,7 @@ def embed_hidden_info_xlsx(xlsx_path, ext_user_username, temp_dir, new_xlsx_path
                 file_path = os.path.join(folder_name, filename)
                 arcname = os.path.relpath(file_path, temp_dir)
                 zip_ref.write(file_path, arcname)
+                app.logger.info(f"Added {file_path} to {new_xlsx_path}")
 
     return new_xlsx_path
 
@@ -135,10 +138,12 @@ def create_zip(ext_user_username, hw_number):
         random_number = random.randint(1, 9)
         doc_key = os.path.join(s3_src_dir, f'IS100_Assignment{hw_number}_Type{random_number}_Text.docx')
         pdf_key = os.path.join(s3_src_dir, f'IS100_Assignment{hw_number}_Type{random_number}_Question.pdf')
+        app.logger.info(f"Selected DOCX key: {doc_key}, PDF key: {pdf_key}")
     elif hw_number == '2':
         random_number = random.randint(1, 2)
         xlsx_key = os.path.join(s3_src_dir, f'IS100_Assignment{hw_number}_Type{random_number}_Question.xlsx')
         txt_key = os.path.join(s3_src_dir, f'IS100_Assignment{hw_number}_Type{random_number}_Data.txt')
+        app.logger.info(f"Selected XLSX key: {xlsx_key}, TXT key: {txt_key}")
 
     # Download only the determined files from S3
     if hw_number == '1':
@@ -146,11 +151,13 @@ def create_zip(ext_user_username, hw_number):
         pdf_src_path = os.path.join(temp_dir, f'IS100_Assignment{hw_number}_Type{random_number}_Question.pdf')
         s3_client.download_file(S3_BUCKET, doc_key, doc_src_path)
         s3_client.download_file(S3_BUCKET, pdf_key, pdf_src_path)
+        app.logger.info(f"Downloaded DOCX file to {doc_src_path} and PDF file to {pdf_src_path}")
     elif hw_number == '2':
         xlsx_src_path = os.path.join(temp_dir, f'IS100_Assignment{hw_number}_Type{random_number}_Question.xlsx')
         txt_src_path = os.path.join(temp_dir, f'IS100_Assignment{hw_number}_Type{random_number}_Data.txt')
         s3_client.download_file(S3_BUCKET, xlsx_key, xlsx_src_path)
         s3_client.download_file(S3_BUCKET, txt_key, txt_src_path)
+        app.logger.info(f"Downloaded XLSX file to {xlsx_src_path} and TXT file to {txt_src_path}")
 
     # Process files (embed hidden info)
     if hw_number == '1':
@@ -163,6 +170,7 @@ def create_zip(ext_user_username, hw_number):
         with zipfile.ZipFile(os.path.join(output_dir, 'output.zip'), 'w') as zipf:
             zipf.write(modified_docx_path, doc_dst)
             zipf.write(pdf_src_path, pdf_dst)
+            app.logger.info(f"Created ZIP file with {modified_docx_path} and {pdf_src_path}")
 
     elif hw_number == '2':
         xlsx_dst = f'IS100_Assignment{hw_number}_{ext_user_username[1:]}.xlsx'
@@ -174,6 +182,7 @@ def create_zip(ext_user_username, hw_number):
         with zipfile.ZipFile(os.path.join(output_dir, 'output.zip'), 'w') as zipf:
             zipf.write(modified_xlsx_path, xlsx_dst)
             zipf.write(txt_src_path, txt_dst)
+            app.logger.info(f"Created ZIP file with {modified_xlsx_path} and {txt_src_path}")
 
     # Upload the ZIP file to S3 output directory
     zip_filepath = os.path.join(output_dir, 'output.zip')
@@ -270,7 +279,7 @@ def download_file():
     )
 
     # Post clean-up
-    app.logger.info("Pre clean-up of temp and output directories in S3")
+    app.logger.info("Post clean-up of temp and output directories in S3")
     #delete_s3_folder(S3_BUCKET, 'temp/')
     #delete_s3_folder(S3_BUCKET, 'output/')
 
