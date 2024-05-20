@@ -1,14 +1,8 @@
-import zipfile
-import os
-import shutil
-import random
-import hashlib
+import zipfile, os, shutil, random, hashlib, re, secrets, boto3, logging
 from lxml import etree
-from flask import Flask, session, request, jsonify, render_template_string, redirect, url_for
+from flask import Flask, session, request, jsonify, render_template_string, redirect
 from flask_session import Session
 from datetime import datetime, timedelta
-import re, secrets, boto3, logging
-import tempfile
 
 app = Flask(__name__)
 
@@ -28,6 +22,24 @@ S3_BUCKET = 'flask-assignment-server-bucket'
 logging.basicConfig(level=logging.INFO)
 app.logger.addHandler(logging.StreamHandler())
 
+def copy_file_in_s3(bucket, src_key, dst_key):
+    copy_source = {'Bucket': bucket, 'Key': src_key}
+    app.logger.info(f"Copying {src_key} to {dst_key} in bucket {bucket}")
+    s3_client.copy(copy_source, bucket, dst_key)
+    app.logger.info(f"Copied {src_key} to {dst_key} in bucket {bucket}")
+
+def upload_file_to_s3(bucket, key, file_path):
+    app.logger.info(f"Uploading {file_path} to S3 bucket {bucket} at {key}")
+    s3_client.upload_file(file_path, bucket, key)
+    app.logger.info(f"Uploaded {file_path} to {key} in S3 bucket {bucket}")
+
+def delete_s3_folder(bucket, prefix):
+    app.logger.info(f"Deleting files in S3 bucket {bucket} with prefix {prefix}")
+    s3 = boto3.resource('s3')
+    bucket = s3.Bucket(bucket)
+    bucket.objects.filter(Prefix=prefix).delete()
+    app.logger.info(f"Deleted files with prefix {prefix} in S3 bucket {bucket}")
+
 def generate_secure_token():
     return secrets.token_urlsafe()
 
@@ -36,14 +48,12 @@ def extract_number(text):
     return numbers[0] if numbers else None
 
 def embed_hidden_info_docx(docx_path, ext_user_username, temp_dir, new_docx_path):
-    # Clean up and create a temporary directory
-    if os.path.exists(temp_dir):
-        shutil.rmtree(temp_dir)
-    os.makedirs(temp_dir)
+    app.logger.info(f"Embedding hidden info in DOCX file {docx_path}")
 
     # Extract the contents of the docx file to the temporary directory
     with zipfile.ZipFile(docx_path, 'r') as zip_ref:
         zip_ref.extractall(temp_dir)
+        app.logger.info(f"Extracted DOCX file {docx_path} to {temp_dir}")
 
     # Path to the custom XML part
     custom_xml_path = os.path.join(temp_dir, 'customXml/item1.xml')
@@ -56,16 +66,12 @@ def embed_hidden_info_docx(docx_path, ext_user_username, temp_dir, new_docx_path
     root = etree.Element('root')
     hidden_info = etree.SubElement(root, 'hiddenInfo')
     hidden_info.text = hex_dig
-    tree = etree.ElementTree(root)
-
-    # Ensure the directory for custom XML exists
-    custom_xml_dir = os.path.dirname(custom_xml_path)
-    if not os.path.exists(custom_xml_dir):
-        os.makedirs(custom_xml_dir)
 
     # Write the hidden info to the custom XML file
+    tree = etree.ElementTree(root)
     with open(custom_xml_path, 'wb') as xml_file:
         tree.write(xml_file, xml_declaration=True, encoding='UTF-8')
+        app.logger.info(f"Written hidden info to {custom_xml_path}")
 
     # Create a new docx file with the modified contents
     with zipfile.ZipFile(new_docx_path, 'w') as zip_ref:
@@ -74,21 +80,17 @@ def embed_hidden_info_docx(docx_path, ext_user_username, temp_dir, new_docx_path
                 file_path = os.path.join(folder_name, filename)
                 arcname = os.path.relpath(file_path, temp_dir)
                 zip_ref.write(file_path, arcname)
-
-    # Clean up intermediate files
-    shutil.rmtree(temp_dir)
+                app.logger.info(f"Added {file_path} to {new_docx_path}")
 
     return new_docx_path
 
 def embed_hidden_info_xlsx(xlsx_path, ext_user_username, temp_dir, new_xlsx_path):
-    # Clean up and create a temporary directory
-    if os.path.exists(temp_dir):
-        shutil.rmtree(temp_dir)
-    os.makedirs(temp_dir)
+    app.logger.info(f"Embedding hidden info in XLSX file {xlsx_path}")
 
     # Extract the contents of the xlsx file to the temporary directory
     with zipfile.ZipFile(xlsx_path, 'r') as zip_ref:
         zip_ref.extractall(temp_dir)
+        app.logger.info(f"Extracted XLSX file {xlsx_path} to {temp_dir}")
 
     # Path to the workbook XML part
     workbook_xml_path = os.path.join(temp_dir, 'xl/workbook.xml')
@@ -106,8 +108,9 @@ def embed_hidden_info_xlsx(xlsx_path, ext_user_username, temp_dir, new_xlsx_path
     hidden_info.text = hex_dig
     root.append(hidden_info)
 
-    # Write the hidden info to the workbook XML
+    # Write the hidden info to the workbook XML file
     tree.write(workbook_xml_path, xml_declaration=True, encoding='UTF-8')
+    app.logger.info(f"Written hidden info to {workbook_xml_path}")
 
     # Create a new xlsx file with the modified contents
     with zipfile.ZipFile(new_xlsx_path, 'w') as zip_ref:
@@ -116,81 +119,62 @@ def embed_hidden_info_xlsx(xlsx_path, ext_user_username, temp_dir, new_xlsx_path
                 file_path = os.path.join(folder_name, filename)
                 arcname = os.path.relpath(file_path, temp_dir)
                 zip_ref.write(file_path, arcname)
-
-    # Clean up intermediate files
-    shutil.rmtree(temp_dir)
+                app.logger.info(f"Added {file_path} to {new_xlsx_path}")
 
     return new_xlsx_path
 
 def create_zip(ext_user_username, hw_number):
-    temp_dir = tempfile.mkdtemp()
-    output_dir = tempfile.mkdtemp()
-    
-    try:
-        # Determine source directory on S3 based on hw_number
-        s3_src_dir = f'assignment{hw_number}_files/'
-        
-        # Determine the specific files to download and process
-        if hw_number == '1':
-            random_number = random.randint(1, 9)
-            doc_key = os.path.join(s3_src_dir, f'IS100_Assignment{hw_number}_Type{random_number}_Text.docx')
-            pdf_key = os.path.join(s3_src_dir, f'IS100_Assignment{hw_number}_Type{random_number}_Question.pdf')
-        elif hw_number == '2':
-            random_number = random.randint(1, 2)
-            xlsx_key = os.path.join(s3_src_dir, f'IS100_Assignment{hw_number}_Type{random_number}_Question.xlsx')
-            txt_key = os.path.join(s3_src_dir, f'IS100_Assignment{hw_number}_Type{random_number}_Data.txt')
-        else:
-            return None
+    temp_dir = 'temp/'
+    output_dir = 'output/'
+    s3_src_dir = f'assignment{hw_number}_files/'
 
-        # Download only the determined files from S3
-        if hw_number == '1':
-            doc_src_path = os.path.join(temp_dir, f'IS100_Assignment{hw_number}_Type{random_number}_Text.docx')
-            pdf_src_path = os.path.join(temp_dir, f'IS100_Assignment{hw_number}_Type{random_number}_Question.pdf')
-            s3_client.download_file(S3_BUCKET, doc_key, doc_src_path)
-            s3_client.download_file(S3_BUCKET, pdf_key, pdf_src_path)
-        elif hw_number == '2':
-            xlsx_src_path = os.path.join(temp_dir, f'IS100_Assignment{hw_number}_Type{random_number}_Question.xlsx')
-            txt_src_path = os.path.join(temp_dir, f'IS100_Assignment{hw_number}_Type{random_number}_Data.txt')
-            s3_client.download_file(S3_BUCKET, xlsx_key, xlsx_src_path)
-            s3_client.download_file(S3_BUCKET, txt_key, txt_src_path)
+    app.logger.info("Cleaning up temp and output directories in S3")
+    delete_s3_folder(S3_BUCKET, temp_dir)
+    delete_s3_folder(S3_BUCKET, output_dir)
 
-        # Process files (embed hidden info)
-        if hw_number == '1':
-            doc_dst = f'IS100_Assignment{hw_number}_{ext_user_username[1:]}.docx'
-            pdf_dst = f'IS100_Assignment{hw_number}_Question.pdf'
-            new_docx_path = os.path.join(output_dir, f'IS100_Assignment{hw_number}_{ext_user_username[1:]}.docx')
+    if hw_number == '1':
+        random_number = random.randint(1, 9)
+        doc_key = f'{s3_src_dir}IS100_Assignment{hw_number}_Type{random_number}_Text.docx'
+        pdf_key = f'{s3_src_dir}IS100_Assignment{hw_number}_Type{random_number}_Question.pdf'
+        app.logger.info(f"Selected DOCX key: {doc_key}, PDF key: {pdf_key}")
+    elif hw_number == '2':
+        random_number = random.randint(1, 2)
+        xlsx_key = f'{s3_src_dir}IS100_Assignment{hw_number}_Type{random_number}_Question.xlsx'
+        txt_key = f'{s3_src_dir}IS100_Assignment{hw_number}_Type{random_number}_Data.txt'
+        app.logger.info(f"Selected XLSX key: {xlsx_key}, TXT key: {txt_key}")
 
-            modified_docx_path = embed_hidden_info_docx(doc_src_path, ext_user_username, temp_dir, new_docx_path)
+    if hw_number == '1':
+        doc_dst_key = f'{temp_dir}IS100_Assignment{hw_number}_Type{random_number}_Text.docx'
+        pdf_dst_key = f'{temp_dir}IS100_Assignment{hw_number}_Type{random_number}_Question.pdf'
+        copy_file_in_s3(S3_BUCKET, doc_key, doc_dst_key)
+        copy_file_in_s3(S3_BUCKET, pdf_key, pdf_dst_key)
+        new_docx_key = f'{output_dir}IS100_Assignment{hw_number}_{ext_user_username[1:]}.docx'
+        modified_docx_key = embed_hidden_info_docx(doc_dst_key, ext_user_username, temp_dir, new_docx_key)
 
-            with zipfile.ZipFile(os.path.join(output_dir, 'output.zip'), 'w') as zipf:
-                zipf.write(modified_docx_path, doc_dst)
-                zipf.write(pdf_src_path, pdf_dst)
+        with zipfile.ZipFile(f'{temp_dir}output.zip', 'w') as zipf:
+            zipf.write(modified_docx_key, new_docx_key)
+            zipf.write(pdf_dst_key, pdf_dst_key)
+            app.logger.info(f"Created ZIP file with {modified_docx_key} and {pdf_dst_key}")
 
-            os.remove(modified_docx_path)
+    elif hw_number == '2':
+        xlsx_dst_key = f'{temp_dir}IS100_Assignment{hw_number}_Type{random_number}_Question.xlsx'
+        txt_dst_key = f'{temp_dir}IS100_Assignment{hw_number}_Type{random_number}_Data.txt'
+        copy_file_in_s3(S3_BUCKET, xlsx_key, xlsx_dst_key)
+        copy_file_in_s3(S3_BUCKET, txt_key, txt_dst_key)
+        new_xlsx_key = f'{output_dir}IS100_Assignment{hw_number}_{ext_user_username[1:]}.xlsx'
+        modified_xlsx_key = embed_hidden_info_xlsx(xlsx_dst_key, ext_user_username, temp_dir, new_xlsx_key)
 
-        elif hw_number == '2':
-            xlsx_dst = f'IS100_Assignment{hw_number}_{ext_user_username[1:]}.xlsx'
-            txt_dst = f'IS100_Assignment{hw_number}_Data.txt'
-            new_xlsx_path = os.path.join(output_dir, f'IS100_Assignment{hw_number}_{ext_user_username[1:]}.xlsx')
+        with zipfile.ZipFile(f'{temp_dir}output.zip', 'w') as zipf:
+            zipf.write(modified_xlsx_key, new_xlsx_key)
+            zipf.write(txt_dst_key, txt_dst_key)
+            app.logger.info(f"Created ZIP file with {modified_xlsx_key} and {txt_dst_key}")
 
-            modified_xlsx_path = embed_hidden_info_xlsx(xlsx_src_path, ext_user_username, temp_dir, new_xlsx_path)
+    zip_filepath = f'{temp_dir}output.zip'
+    s3_output_key = f'output/ASSIGNMENT_{hw_number}_{ext_user_username[1:]}.zip'
+    app.logger.info(f"Uploading ZIP file {zip_filepath} to S3 at {s3_output_key}")
+    upload_file_to_s3(S3_BUCKET, s3_output_key, zip_filepath)
 
-            with zipfile.ZipFile(os.path.join(output_dir, 'output.zip'), 'w') as zipf:
-                zipf.write(modified_xlsx_path, xlsx_dst)
-                zipf.write(txt_src_path, txt_dst)
-
-            os.remove(modified_xlsx_path)
-
-        # Upload the ZIP file to S3 output directory
-        zip_filepath = os.path.join(output_dir, 'output.zip')
-        s3_output_key = f'output/ASSIGNMENT_{hw_number}_{ext_user_username[1:]}.zip'
-        s3_client.upload_file(zip_filepath, S3_BUCKET, s3_output_key)
-
-        return s3_output_key
-
-    finally:
-        shutil.rmtree(temp_dir)
-        shutil.rmtree(output_dir)
+    return s3_output_key
 
 @app.route('/initiate-download', methods=['POST'])
 def initiate_download():
@@ -260,28 +244,27 @@ def initiate_download():
 
 @app.route('/download-file', methods=['GET'])
 def download_file():
-    try:
-        token_sent = request.args.get('token')
-        token_session = session.get('download_token')
-        token_uses = session.get('token_uses', 0)
-        if not token_sent or token_sent != token_session or token_uses >= 3:
-            raise ValueError("Unauthorized access or too many downloads")
-        
-        session['token_uses'] = token_uses + 1
+    token_sent = request.args.get('token')
+    token_session = session.get('download_token')
+    token_uses = session.get('token_uses', 0)
+    if not token_sent or token_sent != token_session or token_uses >= 3:
+        raise ValueError("Unauthorized access or too many downloads")
+    
+    session['token_uses'] = token_uses + 1
 
-        s3_output_key = session.get('filename')
-        if not s3_output_key:
-            raise ValueError("Filename not found in session")
+    s3_output_key = session.get('filename')
+    if not s3_output_key:
+        raise ValueError("Filename not found in session")
 
-        response = s3_client.generate_presigned_url(
-            'get_object',
-            Params={'Bucket': S3_BUCKET, 'Key': s3_output_key},
-            ExpiresIn=3600
-        )
-        return redirect(response)
-    except ValueError as ve:
-        app.logger.error(f"Access error: {str(ve)}")
-        return jsonify({"error": str(ve)}), 403
-    except Exception as e:
-        app.logger.error(f"Error downloading file: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+    response = s3_client.generate_presigned_url(
+        'get_object',
+        Params={'Bucket': S3_BUCKET, 'Key': s3_output_key},
+        ExpiresIn=3600
+    )
+
+    # Post clean-up
+    app.logger.info("Post clean-up of temp and output directories in S3")
+    #delete_s3_folder(S3_BUCKET, 'temp/')
+    #delete_s3_folder(S3_BUCKET, 'output/')
+
+    return redirect(response)

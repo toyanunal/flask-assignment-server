@@ -1,4 +1,4 @@
-import zipfile, os, shutil, random, hashlib, re, secrets, boto3, logging
+import zipfile, os, shutil, random, hashlib, re, secrets, boto3, logging, io
 from lxml import etree
 from flask import Flask, session, request, jsonify, render_template_string, redirect
 from flask_session import Session
@@ -21,11 +21,6 @@ S3_BUCKET = 'flask-assignment-server-bucket'
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 app.logger.addHandler(logging.StreamHandler())
-
-def download_file_from_s3(bucket, key, download_path):
-    app.logger.info(f"Downloading {key} from S3 bucket {bucket} to {download_path}")
-    s3_client.download_file(bucket, key, download_path)
-    app.logger.info(f"Downloaded {key} to {download_path}")
 
 def copy_file_in_s3(bucket, src_key, dst_key):
     copy_source = {'Bucket': bucket, 'Key': src_key}
@@ -52,81 +47,81 @@ def extract_number(text):
     numbers = re.findall(r'\d+', text)
     return numbers[0] if numbers else None
 
-def embed_hidden_info_docx(docx_path, ext_user_username, temp_dir, new_docx_path):
-    app.logger.info(f"Embedding hidden info in DOCX file {docx_path}")
+def embed_hidden_info_docx(docx_key, ext_user_username, new_docx_key):
+    app.logger.info(f"Embedding hidden info in DOCX file {docx_key}")
 
-    # Extract the contents of the docx file to the temporary directory
-    with zipfile.ZipFile(docx_path, 'r') as zip_ref:
-        zip_ref.extractall(temp_dir)
-        app.logger.info(f"Extracted DOCX file {docx_path} to {temp_dir}")
+    # Download the DOCX file to an in-memory file
+    docx_obj = io.BytesIO()
+    s3_client.download_fileobj(S3_BUCKET, docx_key, docx_obj)
+    docx_obj.seek(0)
 
-    # Path to the custom XML part
-    custom_xml_path = os.path.join(temp_dir, 'customXml/item1.xml')
+    # Extract the contents of the DOCX file to an in-memory zip
+    with zipfile.ZipFile(docx_obj, 'r') as zip_ref:
+        temp_dir = {name: zip_ref.read(name) for name in zip_ref.namelist()}
 
-    # Create a SHA-256 hash of the username
+    # Modify the custom XML part in-memory
     hash_object = hashlib.sha256(ext_user_username[1:].encode())
     hex_dig = hash_object.hexdigest()
-
-    # Create XML elements and set the hashed username as hidden info
     root = etree.Element('root')
     hidden_info = etree.SubElement(root, 'hiddenInfo')
     hidden_info.text = hex_dig
-
-    # Write the hidden info to the custom XML file
     tree = etree.ElementTree(root)
-    with open(custom_xml_path, 'wb') as xml_file:
-        tree.write(xml_file, xml_declaration=True, encoding='UTF-8')
-        app.logger.info(f"Written hidden info to {custom_xml_path}")
+    custom_xml_obj = io.BytesIO()
+    tree.write(custom_xml_obj, xml_declaration=True, encoding='UTF-8')
+    custom_xml_obj.seek(0)
+    temp_dir['customXml/item1.xml'] = custom_xml_obj.read()
 
-    # Create a new docx file with the modified contents
-    with zipfile.ZipFile(new_docx_path, 'w') as zip_ref:
-        for folder_name, subfolders, filenames in os.walk(temp_dir):
-            for filename in filenames:
-                file_path = os.path.join(folder_name, filename)
-                arcname = os.path.relpath(file_path, temp_dir)
-                zip_ref.write(file_path, arcname)
-                app.logger.info(f"Added {file_path} to {new_docx_path}")
+    # Create a new DOCX file in-memory
+    new_docx_obj = io.BytesIO()
+    with zipfile.ZipFile(new_docx_obj, 'w') as zip_ref:
+        for name, data in temp_dir.items():
+            zip_ref.writestr(name, data)
+    new_docx_obj.seek(0)
 
-    return new_docx_path
+    # Upload the modified DOCX file to S3
+    s3_client.upload_fileobj(new_docx_obj, S3_BUCKET, new_docx_key)
+    app.logger.info(f"Uploaded modified DOCX to {new_docx_key}")
 
-def embed_hidden_info_xlsx(xlsx_path, ext_user_username, temp_dir, new_xlsx_path):
-    app.logger.info(f"Embedding hidden info in XLSX file {xlsx_path}")
+    return new_docx_key
 
-    # Extract the contents of the xlsx file to the temporary directory
-    with zipfile.ZipFile(xlsx_path, 'r') as zip_ref:
-        zip_ref.extractall(temp_dir)
-        app.logger.info(f"Extracted XLSX file {xlsx_path} to {temp_dir}")
+def embed_hidden_info_xlsx(xlsx_key, ext_user_username, new_xlsx_key):
+    app.logger.info(f"Embedding hidden info in XLSX file {xlsx_key}")
 
-    # Path to the workbook XML part
-    workbook_xml_path = os.path.join(temp_dir, 'xl/workbook.xml')
+    # Download the XLSX file to an in-memory file
+    xlsx_obj = io.BytesIO()
+    s3_client.download_fileobj(S3_BUCKET, xlsx_key, xlsx_obj)
+    xlsx_obj.seek(0)
 
-    # Parse the workbook XML
-    tree = etree.parse(workbook_xml_path)
+    # Extract the contents of the XLSX file to an in-memory zip
+    with zipfile.ZipFile(xlsx_obj, 'r') as zip_ref:
+        temp_dir = {name: zip_ref.read(name) for name in zip_ref.namelist()}
+
+    # Modify the workbook XML part in-memory
+    workbook_xml_obj = io.BytesIO(temp_dir['xl/workbook.xml'])
+    tree = etree.parse(workbook_xml_obj)
     root = tree.getroot()
-
-    # Create a SHA-256 hash of the username
     hash_object = hashlib.sha256(ext_user_username[1:].encode())
     hex_dig = hash_object.hexdigest()
-
-    # Create XML elements and set the hashed username as hidden info
     hidden_info = etree.Element('hiddenInfo')
     hidden_info.text = hex_dig
     root.append(hidden_info)
+    workbook_xml_obj = io.BytesIO()
+    tree.write(workbook_xml_obj, xml_declaration=True, encoding='UTF-8')
+    workbook_xml_obj.seek(0)
+    temp_dir['xl/workbook.xml'] = workbook_xml_obj.read()
 
-    # Write the hidden info to the workbook XML file
-    tree.write(workbook_xml_path, xml_declaration=True, encoding='UTF-8')
-    app.logger.info(f"Written hidden info to {workbook_xml_path}")
+    # Create a new XLSX file in-memory
+    new_xlsx_obj = io.BytesIO()
+    with zipfile.ZipFile(new_xlsx_obj, 'w') as zip_ref:
+        for name, data in temp_dir.items():
+            zip_ref.writestr(name, data)
+    new_xlsx_obj.seek(0)
 
-    # Create a new xlsx file with the modified contents
-    with zipfile.ZipFile(new_xlsx_path, 'w') as zip_ref:
-        for folder_name, subfolders, filenames in os.walk(temp_dir):
-            for filename in filenames:
-                file_path = os.path.join(folder_name, filename)
-                arcname = os.path.relpath(file_path, temp_dir)
-                zip_ref.write(file_path, arcname)
-                app.logger.info(f"Added {file_path} to {new_xlsx_path}")
+    # Upload the modified XLSX file to S3
+    s3_client.upload_fileobj(new_xlsx_obj, S3_BUCKET, new_xlsx_key)
+    app.logger.info(f"Uploaded modified XLSX to {new_xlsx_key}")
 
-    return new_xlsx_path
+    return new_xlsx_key
 
 def create_zip(ext_user_username, hw_number):
     temp_dir = 'temp/'
@@ -142,42 +137,46 @@ def create_zip(ext_user_username, hw_number):
         doc_key = f'{s3_src_dir}IS100_Assignment{hw_number}_Type{random_number}_Text.docx'
         pdf_key = f'{s3_src_dir}IS100_Assignment{hw_number}_Type{random_number}_Question.pdf'
         app.logger.info(f"Selected DOCX key: {doc_key}, PDF key: {pdf_key}")
+
+        doc_dst_key = f'{temp_dir}IS100_Assignment{hw_number}_Type{random_number}_Text.docx'
+        pdf_dst_key = f'{temp_dir}IS100_Assignment{hw_number}_Type{random_number}_Question.pdf'
+        copy_file_in_s3(S3_BUCKET, doc_key, doc_dst_key)
+        copy_file_in_s3(S3_BUCKET, pdf_key, pdf_dst_key)
+
+        new_docx_key = f'{output_dir}IS100_Assignment{hw_number}_{ext_user_username[1:]}.docx'
+        modified_docx_key = embed_hidden_info_docx(doc_dst_key, ext_user_username, temp_dir, new_docx_key)
+
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, 'w') as zipf:
+            zipf.write(modified_docx_key, new_docx_key)
+            zipf.write(pdf_dst_key, pdf_dst_key)
+            app.logger.info(f"Created ZIP file with {modified_docx_key} and {pdf_dst_key}")
+        zip_buffer.seek(0)
+
     elif hw_number == '2':
         random_number = random.randint(1, 2)
         xlsx_key = f'{s3_src_dir}IS100_Assignment{hw_number}_Type{random_number}_Question.xlsx'
         txt_key = f'{s3_src_dir}IS100_Assignment{hw_number}_Type{random_number}_Data.txt'
         app.logger.info(f"Selected XLSX key: {xlsx_key}, TXT key: {txt_key}")
 
-    if hw_number == '1':
-        doc_dst_key = f'{temp_dir}IS100_Assignment{hw_number}_Type{random_number}_Text.docx'
-        pdf_dst_key = f'{temp_dir}IS100_Assignment{hw_number}_Type{random_number}_Question.pdf'
-        copy_file_in_s3(S3_BUCKET, doc_key, doc_dst_key)
-        copy_file_in_s3(S3_BUCKET, pdf_key, pdf_dst_key)
-        new_docx_key = f'{output_dir}IS100_Assignment{hw_number}_{ext_user_username[1:]}.docx'
-        modified_docx_key = embed_hidden_info_docx(doc_dst_key, ext_user_username, temp_dir, new_docx_key)
-
-        with zipfile.ZipFile(f'{temp_dir}output.zip', 'w') as zipf:
-            zipf.write(modified_docx_key, new_docx_key)
-            zipf.write(pdf_dst_key, pdf_dst_key)
-            app.logger.info(f"Created ZIP file with {modified_docx_key} and {pdf_dst_key}")
-
-    elif hw_number == '2':
         xlsx_dst_key = f'{temp_dir}IS100_Assignment{hw_number}_Type{random_number}_Question.xlsx'
         txt_dst_key = f'{temp_dir}IS100_Assignment{hw_number}_Type{random_number}_Data.txt'
         copy_file_in_s3(S3_BUCKET, xlsx_key, xlsx_dst_key)
         copy_file_in_s3(S3_BUCKET, txt_key, txt_dst_key)
+
         new_xlsx_key = f'{output_dir}IS100_Assignment{hw_number}_{ext_user_username[1:]}.xlsx'
         modified_xlsx_key = embed_hidden_info_xlsx(xlsx_dst_key, ext_user_username, temp_dir, new_xlsx_key)
 
-        with zipfile.ZipFile(f'{temp_dir}output.zip', 'w') as zipf:
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, 'w') as zipf:
             zipf.write(modified_xlsx_key, new_xlsx_key)
             zipf.write(txt_dst_key, txt_dst_key)
             app.logger.info(f"Created ZIP file with {modified_xlsx_key} and {txt_dst_key}")
+        zip_buffer.seek(0)
 
-    zip_filepath = f'{temp_dir}output.zip'
     s3_output_key = f'output/ASSIGNMENT_{hw_number}_{ext_user_username[1:]}.zip'
-    app.logger.info(f"Uploading ZIP file {zip_filepath} to S3 at {s3_output_key}")
-    upload_file_to_s3(S3_BUCKET, s3_output_key, zip_filepath)
+    app.logger.info(f"Uploading ZIP file to S3 at {s3_output_key}")
+    s3_client.upload_fileobj(zip_buffer, S3_BUCKET, s3_output_key)
 
     return s3_output_key
 
