@@ -213,7 +213,8 @@ def initiate_download():
         app.logger.error(f"Error creating zip file: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-    token = generate_secure_token()
+    app.logger.info(f"Token generated and stored in session: {token}")
+    
     html_content = f'''
     <!DOCTYPE html>
     <html lang="en">
@@ -252,7 +253,6 @@ def download_file():
     token_session = session.get('download_token')
     token_uses = session.get('token_uses', 0)
 
-    # Add logging to debug token and download count
     app.logger.info(f"Token sent: {token_sent}, Token in session: {token_session}, Token uses: {token_uses}")
 
     if not token_sent or token_sent != token_session:
