@@ -148,8 +148,16 @@ def create_zip(ext_user_username, hw_number):
 
         zip_buffer = io.BytesIO()
         with zipfile.ZipFile(zip_buffer, 'w') as zipf:
-            zipf.writestr(new_docx_key, modified_docx_key)
-            zipf.writestr(pdf_dst_key, pdf_dst_key)
+            with io.BytesIO() as doc_data:
+                s3_client.download_fileobj(S3_BUCKET, modified_docx_key, doc_data)
+                doc_data.seek(0)
+                zipf.writestr(f'IS100_Assignment{hw_number}_{ext_user_username[1:]}.docx', doc_data.read())
+
+            with io.BytesIO() as pdf_data:
+                s3_client.download_fileobj(S3_BUCKET, pdf_dst_key, pdf_data)
+                pdf_data.seek(0)
+                zipf.writestr(f'IS100_Assignment{hw_number}_Question.pdf', pdf_data.read())
+
             app.logger.info(f"Created ZIP file with {modified_docx_key} and {pdf_dst_key}")
         zip_buffer.seek(0)
 
@@ -169,8 +177,16 @@ def create_zip(ext_user_username, hw_number):
 
         zip_buffer = io.BytesIO()
         with zipfile.ZipFile(zip_buffer, 'w') as zipf:
-            zipf.writestr(new_xlsx_key, modified_xlsx_key)
-            zipf.writestr(txt_dst_key, txt_dst_key)
+            with io.BytesIO() as xlsx_data:
+                s3_client.download_fileobj(S3_BUCKET, modified_xlsx_key, xlsx_data)
+                xlsx_data.seek(0)
+                zipf.writestr(f'IS100_Assignment{hw_number}_{ext_user_username[1:]}.xlsx', xlsx_data.read())
+
+            with io.BytesIO() as txt_data:
+                s3_client.download_fileobj(S3_BUCKET, txt_dst_key, txt_data)
+                txt_data.seek(0)
+                zipf.writestr(f'IS100_Assignment{hw_number}_Data.txt', txt_data.read())
+
             app.logger.info(f"Created ZIP file with {modified_xlsx_key} and {txt_dst_key}")
         zip_buffer.seek(0)
 
