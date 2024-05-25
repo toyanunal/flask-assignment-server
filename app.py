@@ -47,12 +47,21 @@ def extract_number(text):
     numbers = re.findall(r'\d+', text)
     return numbers[0] if numbers else None
 
-def generate_random_number(ext_user_username, max_number):
-    seed = int(ext_user_username[1:])
+def generate_random_number(ext_user_username, semester_info, max_number):
+    combined_info = ext_user_username[1:] + semester_info
+    seed = int(hashlib.sha256(combined_info.encode()).hexdigest(), 16) % (10 ** 8)  # Use a part of the hash for the seed
+    seed1 = int(hashlib.sha256(combined_info.encode()).hexdigest(), 16)
+    app.logger.info(f"Seed for random number generation: {seed, seed1}")
     random.seed(seed)
     return random.randint(1, max_number)
 
-def embed_hidden_info_docx(docx_key, ext_user_username, new_docx_key):
+def generate_hex_dig(ext_user_username, semester_info):
+    combined_info = ext_user_username[1:] + semester_info
+    hash_object = hashlib.sha256(combined_info.encode())
+    hex_dig = hash_object.hexdigest()
+    return hex_dig
+
+def embed_hidden_info_docx(docx_key, ext_user_username, semester_info, new_docx_key):
     app.logger.info(f"Embedding hidden info in DOCX file {docx_key}")
 
     # Download the DOCX file to an in-memory file
@@ -65,8 +74,7 @@ def embed_hidden_info_docx(docx_key, ext_user_username, new_docx_key):
         temp_dir = {name: zip_ref.read(name) for name in zip_ref.namelist()}
 
     # Modify the custom XML part in-memory
-    hash_object = hashlib.sha256(ext_user_username[1:].encode())
-    hex_dig = hash_object.hexdigest()
+    hex_dig = generate_hex_dig(ext_user_username, semester_info)
     root = etree.Element('root')
     hidden_info = etree.SubElement(root, 'hiddenInfo')
     hidden_info.text = hex_dig
@@ -89,7 +97,7 @@ def embed_hidden_info_docx(docx_key, ext_user_username, new_docx_key):
 
     return new_docx_key
 
-def embed_hidden_info_xlsx(xlsx_key, ext_user_username, new_xlsx_key):
+def embed_hidden_info_xlsx(xlsx_key, ext_user_username, semester_info, new_xlsx_key):
     app.logger.info(f"Embedding hidden info in XLSX file {xlsx_key}")
 
     # Download the XLSX file to an in-memory file
@@ -105,8 +113,7 @@ def embed_hidden_info_xlsx(xlsx_key, ext_user_username, new_xlsx_key):
     workbook_xml_obj = io.BytesIO(temp_dir['xl/workbook.xml'])
     tree = etree.parse(workbook_xml_obj)
     root = tree.getroot()
-    hash_object = hashlib.sha256(ext_user_username[1:].encode())
-    hex_dig = hash_object.hexdigest()
+    hex_dig = generate_hex_dig(ext_user_username, semester_info)
     hidden_info = etree.Element('hiddenInfo')
     hidden_info.text = hex_dig
     root.append(hidden_info)
@@ -128,7 +135,7 @@ def embed_hidden_info_xlsx(xlsx_key, ext_user_username, new_xlsx_key):
 
     return new_xlsx_key
 
-def create_zip(ext_user_username, hw_number):
+def create_zip(ext_user_username, semester_info, hw_number):
     temp_dir = 'temp/'
     output_dir = 'output/'
     s3_src_dir = f'assignment{hw_number}_files/'
@@ -138,7 +145,7 @@ def create_zip(ext_user_username, hw_number):
     delete_s3_folder(S3_BUCKET, output_dir)
 
     if hw_number == '1':
-        random_number = generate_random_number(ext_user_username, 9)
+        random_number = generate_random_number(ext_user_username, semester_info, 9)
         app.logger.info(f"Random number generated: {random_number}")
 
         doc_key = f'{s3_src_dir}IS100_Assignment{hw_number}_Type{random_number}_Text.docx'
@@ -151,7 +158,7 @@ def create_zip(ext_user_username, hw_number):
         copy_file_in_s3(S3_BUCKET, pdf_key, pdf_dst_key)
 
         new_docx_key = f'{output_dir}IS100_Assignment{hw_number}_{ext_user_username[1:]}.docx'
-        modified_docx_key = embed_hidden_info_docx(doc_dst_key, ext_user_username, new_docx_key)
+        modified_docx_key = embed_hidden_info_docx(doc_dst_key, ext_user_username, semester_info, new_docx_key)
 
         zip_buffer = io.BytesIO()
         with zipfile.ZipFile(zip_buffer, 'w') as zipf:
@@ -182,7 +189,7 @@ def create_zip(ext_user_username, hw_number):
         copy_file_in_s3(S3_BUCKET, txt_key, txt_dst_key)
 
         new_xlsx_key = f'{output_dir}IS100_Assignment{hw_number}_{ext_user_username[1:]}.xlsx'
-        modified_xlsx_key = embed_hidden_info_xlsx(xlsx_dst_key, ext_user_username, new_xlsx_key)
+        modified_xlsx_key = embed_hidden_info_xlsx(xlsx_dst_key, ext_user_username, semester_info, new_xlsx_key)
 
         zip_buffer = io.BytesIO()
         with zipfile.ZipFile(zip_buffer, 'w') as zipf:
@@ -215,13 +222,15 @@ def initiate_download():
     # Print the form data for debugging
     app.logger.info(f"Form Data: {request.form}")
 
+    # Extract assignment number from the form data
     custom_hw = request.form.get('custom_hw')
     resource_link_title = request.form.get('resource_link_title')
     hw_number = extract_number(custom_hw) if custom_hw else extract_number(resource_link_title)
-    
+
     if not hw_number:
         return jsonify({"error": "Assignment number not correctly provided"}), 400
     
+    # Extract username from the form data
     ext_user_username = request.form.get('ext_user_username')
 
     if not ext_user_username:
@@ -231,8 +240,15 @@ def initiate_download():
     if not re.match(r'^e\d+$', ext_user_username):
         return jsonify({"error": "Invalid username format"}), 400
 
+    # Extract semester info from the form data
+    semester_info = request.form.get('tool_consumer_instance_name')
+
+    if not semester_info:
+        return jsonify({"error": "Semester info not provided"}), 400
+
+    # Create a ZIP file with the assignment files
     try:
-        s3_output_key = create_zip(ext_user_username, hw_number)
+        s3_output_key = create_zip(ext_user_username, semester_info, hw_number)
         if s3_output_key:
             session['filename'] = s3_output_key
         else:
