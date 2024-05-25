@@ -20,7 +20,15 @@ S3_BUCKET = 'flask-assignment-server-bucket'
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
-app.logger.addHandler(logging.StreamHandler())
+logger = logging.getLogger()
+if logger.hasHandlers():
+    logger.handlers.clear()
+
+handler = logging.StreamHandler()
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+logger.setLevel(logging.INFO)
 
 def copy_file_in_s3(bucket, src_key, dst_key):
     copy_source = {'Bucket': bucket, 'Key': src_key}
