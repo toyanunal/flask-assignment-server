@@ -72,18 +72,12 @@ def embed_hidden_info_docx(docx_key, ext_user_username, semester_info, new_docx_
     app.logger.info(f"Generated hex digest: {hex_dig}")
 
     # Modify the workbook XML part in-memory
-    xml_obj = io.BytesIO(temp_dir['docProps/core.xml'])
+    xml_obj = io.BytesIO(temp_dir['customXml/item1.xml'])
     tree = etree.parse(xml_obj)
     root = tree.getroot()
-
-    # Create a custom namespace for the hidden key and info
-    custom_ns = "http://example.com/custom-properties"
-    etree.register_namespace("custom", custom_ns)
-
-    # Add the hidden key and info to the core.xml file
-    hidden_key = etree.Element("{http://example.com/custom-properties}hiddenKey")
+    hidden_key = etree.Element('hiddenKey')
     hidden_key.text = hex_dig
-    hidden_info = etree.Element("{http://example.com/custom-properties}hiddenInfo")
+    hidden_info = etree.Element('hiddenInfo')
     hidden_info.text = f"{ext_user_username},{semester_info}"
     root.append(hidden_key)
     root.append(hidden_info)
@@ -92,7 +86,7 @@ def embed_hidden_info_docx(docx_key, ext_user_username, semester_info, new_docx_
     xml_obj = io.BytesIO()
     tree.write(xml_obj, xml_declaration=True, encoding='UTF-8')
     xml_obj.seek(0)
-    temp_dir['docProps/core.xml'] = xml_obj.read()
+    temp_dir['customXml/item1.xml'] = xml_obj.read()
 
     # Create a new DOCX file in-memory with the modified contents
     new_docx_obj = io.BytesIO()
@@ -124,18 +118,12 @@ def embed_hidden_info_xlsx(xlsx_key, ext_user_username, semester_info, new_xlsx_
     app.logger.info(f"Generated hex digest: {hex_dig}")
 
     # Modify the workbook XML part in-memory
-    xml_obj = io.BytesIO(temp_dir['docProps/core.xml'])
+    xml_obj = io.BytesIO(temp_dir['customXml/item1.xml'])
     tree = etree.parse(xml_obj)
     root = tree.getroot()
-
-    # Create a custom namespace for the hidden key and info
-    custom_ns = "http://example.com/custom-properties"
-    etree.register_namespace("custom", custom_ns)
-
-    # Add the hidden key and info to the core.xml file
-    hidden_key = etree.Element("{http://example.com/custom-properties}hiddenKey")
+    hidden_key = etree.Element('hiddenKey')
     hidden_key.text = hex_dig
-    hidden_info = etree.Element("{http://example.com/custom-properties}hiddenInfo")
+    hidden_info = etree.Element('hiddenInfo')
     hidden_info.text = f"{ext_user_username},{semester_info}"
     root.append(hidden_key)
     root.append(hidden_info)
@@ -144,7 +132,7 @@ def embed_hidden_info_xlsx(xlsx_key, ext_user_username, semester_info, new_xlsx_
     xml_obj = io.BytesIO()
     tree.write(xml_obj, xml_declaration=True, encoding='UTF-8')
     xml_obj.seek(0)
-    temp_dir['docProps/core.xml'] = xml_obj.read()
+    temp_dir['customXml/item1.xml'] = xml_obj.read()
     
     # Create a new XLSX file in-memory with the modified contents
     new_xlsx_obj = io.BytesIO()
