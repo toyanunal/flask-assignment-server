@@ -47,6 +47,11 @@ def extract_number(text):
     numbers = re.findall(r'\d+', text)
     return numbers[0] if numbers else None
 
+def generate_random_number(ext_user_username, max_number):
+    seed = int(ext_user_username[1:])
+    random.seed(seed)
+    return random.randint(1, max_number)
+
 def embed_hidden_info_docx(docx_key, ext_user_username, new_docx_key):
     app.logger.info(f"Embedding hidden info in DOCX file {docx_key}")
 
@@ -133,7 +138,9 @@ def create_zip(ext_user_username, hw_number):
     delete_s3_folder(S3_BUCKET, output_dir)
 
     if hw_number == '1':
-        random_number = random.randint(1, 9)
+        random_number = generate_random_number(ext_user_username, 9)
+        app.logger.info(f"Random number generated: {random_number}")
+
         doc_key = f'{s3_src_dir}IS100_Assignment{hw_number}_Type{random_number}_Text.docx'
         pdf_key = f'{s3_src_dir}IS100_Assignment{hw_number}_Type{random_number}_Question.pdf'
         app.logger.info(f"Selected DOCX key: {doc_key}, PDF key: {pdf_key}")
@@ -162,7 +169,9 @@ def create_zip(ext_user_username, hw_number):
         zip_buffer.seek(0)
 
     elif hw_number == '2':
-        random_number = random.randint(1, 2)
+        random_number = generate_random_number(ext_user_username, 2)
+        app.logger.info(f"Random number generated: {random_number}")
+    
         xlsx_key = f'{s3_src_dir}IS100_Assignment{hw_number}_Type{random_number}_Question.xlsx'
         txt_key = f'{s3_src_dir}IS100_Assignment{hw_number}_Type{random_number}_Data.txt'
         app.logger.info(f"Selected XLSX key: {xlsx_key}, TXT key: {txt_key}")
