@@ -117,10 +117,17 @@ def embed_hidden_info_xlsx(xlsx_key, ext_user_username, semester_info, new_xlsx_
     hex_dig = generate_hex_dig(ext_user_username, semester_info)
     app.logger.info(f"Generated hex digest: {hex_dig}")
 
-    # Modify the workbook XML part in-memory
-    xml_obj = io.BytesIO(temp_dir['customXml/item1.xml'])
-    tree = etree.parse(xml_obj)
-    root = tree.getroot()
+    # Check if customXml/item1.xml exists
+    if 'customXml/item1.xml' in temp_dir:
+        xml_obj = io.BytesIO(temp_dir['customXml/item1.xml'])
+        tree = etree.parse(xml_obj)
+        root = tree.getroot()
+    else:
+        # Create a new XML structure if it doesn't exist
+        root = etree.Element('root')
+        tree = etree.ElementTree(root)
+
+    # Add hiddenKey and hiddenInfo elements to the XML
     hidden_key = etree.Element('hiddenKey')
     hidden_key.text = hex_dig
     hidden_info = etree.Element('hiddenInfo')
