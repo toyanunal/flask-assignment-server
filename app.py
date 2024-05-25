@@ -36,10 +36,10 @@ def copy_file_in_s3(bucket, src_key, dst_key):
     s3_client.copy(copy_source, bucket, dst_key)
     app.logger.info(f"Copied {src_key} to {dst_key} in bucket {bucket}")
 
-def upload_file_to_s3(bucket, key, file_path):
-    app.logger.info(f"Uploading {file_path} to S3 bucket {bucket} at {key}")
-    s3_client.upload_file(file_path, bucket, key)
-    app.logger.info(f"Uploaded {file_path} to {key} in S3 bucket {bucket}")
+# def upload_file_to_s3(bucket, key, file_path):
+#     app.logger.info(f"Uploading {file_path} to S3 bucket {bucket} at {key}")
+#     s3_client.upload_file(file_path, bucket, key)
+#     app.logger.info(f"Uploaded {file_path} to {key} in S3 bucket {bucket}")
 
 def delete_s3_folder(bucket, prefix):
     app.logger.info(f"Deleting files in S3 bucket {bucket} with prefix {prefix}")
@@ -47,9 +47,6 @@ def delete_s3_folder(bucket, prefix):
     bucket = s3.Bucket(bucket)
     bucket.objects.filter(Prefix=prefix).delete()
     app.logger.info(f"Deleted files with prefix {prefix} in S3 bucket {bucket}")
-
-def generate_secure_token():
-    return secrets.token_urlsafe()
 
 def extract_number(text):
     numbers = re.findall(r'\d+', text)
@@ -222,7 +219,7 @@ def create_zip(ext_user_username, semester_info, hw_number):
 
 @app.route('/initiate-download', methods=['POST'])
 def initiate_download():
-    token = generate_secure_token()
+    token = secrets.token_urlsafe()
     session['download_token'] = token
     session['token_expiry'] = (datetime.now() + timedelta(minutes=1)).timestamp()
     session['token_uses'] = 0
@@ -328,7 +325,6 @@ def download_file():
         ExpiresIn=3600
     )
 
-    app.logger.info(f"Cleaning up temp directory in S3")
     delete_s3_folder(S3_BUCKET, 'temp/')
     
     app.logger.info(f"Presigned URL generated for {s3_output_key}")
