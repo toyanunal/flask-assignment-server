@@ -50,8 +50,6 @@ def extract_number(text):
 def generate_random_number(ext_user_username, semester_info, max_number):
     combined_info = ext_user_username[1:] + semester_info
     seed = int(hashlib.sha256(combined_info.encode()).hexdigest(), 16) % (10 ** 8)  # Use a part of the hash for the seed
-    seed1 = int(hashlib.sha256(combined_info.encode()).hexdigest(), 16)
-    app.logger.info(f"Seed for random number generation: {seed, seed1}")
     random.seed(seed)
     return random.randint(1, max_number)
 
@@ -75,6 +73,7 @@ def embed_hidden_info_docx(docx_key, ext_user_username, semester_info, new_docx_
 
     # Modify the custom XML part in-memory
     hex_dig = generate_hex_dig(ext_user_username, semester_info)
+    app.logger.info(f"Generated hex digest: {hex_dig}")
     root = etree.Element('root')
     hidden_info = etree.SubElement(root, 'hiddenInfo')
     hidden_info.text = hex_dig
@@ -114,6 +113,7 @@ def embed_hidden_info_xlsx(xlsx_key, ext_user_username, semester_info, new_xlsx_
     tree = etree.parse(workbook_xml_obj)
     root = tree.getroot()
     hex_dig = generate_hex_dig(ext_user_username, semester_info)
+    app.logger.info(f"Generated hex digest: {hex_dig}")
     hidden_info = etree.Element('hiddenInfo')
     hidden_info.text = hex_dig
     root.append(hidden_info)
