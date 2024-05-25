@@ -186,7 +186,7 @@ def create_zip(ext_user_username, semester_info, hw_number):
         zip_buffer.seek(0)
 
     elif hw_number == '2':
-        random_number = generate_random_number(ext_user_username, 2)
+        random_number = generate_random_number(ext_user_username, semester_info, 2)
         app.logger.info(f"Random number generated: {random_number}")
     
         xlsx_key = f'{s3_src_dir}IS100_Assignment{hw_number}_Type{random_number}_Question.xlsx'
