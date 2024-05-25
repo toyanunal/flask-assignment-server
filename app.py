@@ -67,24 +67,43 @@ def embed_hidden_info_docx(docx_key, ext_user_username, semester_info, new_docx_
     with zipfile.ZipFile(docx_obj, 'r') as zip_ref:
         temp_dir = {name: zip_ref.read(name) for name in zip_ref.namelist()}
 
-    # Modify the workbook XML part in-memory
-    xml_obj = io.BytesIO(temp_dir['customXml/item1.xml'])
-    tree = etree.parse(xml_obj)
-    root = tree.getroot()
+    # Generate the hash
     hex_dig = generate_hex_dig(ext_user_username, semester_info)
     app.logger.info(f"Generated hex digest: {hex_dig}")
-    hidden_key = etree.Element('hiddenKey')
-    hidden_key.text = hex_dig
-    hidden_info = etree.Element('hiddenInfo')
-    hidden_info.text = f"{ext_user_username},{semester_info}"
-    root.append(hidden_key)
-    root.append(hidden_info)
-    xml_obj = io.BytesIO()
-    tree.write(xml_obj, xml_declaration=True, encoding='UTF-8')
-    xml_obj.seek(0)
-    temp_dir['customXml/item1.xml'] = xml_obj.read()
 
-    # Create a new DOCX file in-memory
+    # Create the custom XML content
+    root = etree.Element('root')
+    hidden_key = etree.SubElement(root, 'hiddenKey')
+    hidden_key.text = hex_dig
+    hidden_info = etree.SubElement(root, 'hiddenInfo')
+    hidden_info.text = f"{ext_user_username},{semester_info}"
+    tree = etree.ElementTree(root)
+
+    # Write the custom XML content to an in-memory file
+    custom_xml_obj = io.BytesIO()
+    tree.write(custom_xml_obj, xml_declaration=True, encoding='UTF-8')
+    custom_xml_obj.seek(0)
+
+    # Add the custom XML to the temp_dir
+    custom_xml_path = 'docProps/custom.xml'
+    temp_dir[custom_xml_path] = custom_xml_obj.read()
+
+    # Update the [Content_Types].xml to include the custom XML
+    content_types_xml = temp_dir['[Content_Types].xml']
+    content_tree = etree.fromstring(content_types_xml)
+    override = etree.Element(
+        'Override', 
+        ContentType="application/vnd.openxmlformats-officedocument.customXmlProperties+xml",
+        PartName="/docProps/custom.xml",
+        xmlns="http://schemas.openxmlformats.org/package/2006/content-types"
+    )
+    content_tree.append(override)
+    content_types_obj = io.BytesIO()
+    etree.ElementTree(content_tree).write(content_types_obj, xml_declaration=True, encoding='UTF-8')
+    content_types_obj.seek(0)
+    temp_dir['[Content_Types].xml'] = content_types_obj.read()
+
+    # Create a new DOCX file in-memory with the modified contents
     new_docx_obj = io.BytesIO()
     with zipfile.ZipFile(new_docx_obj, 'w') as zip_ref:
         for name, data in temp_dir.items():
@@ -109,24 +128,43 @@ def embed_hidden_info_xlsx(xlsx_key, ext_user_username, semester_info, new_xlsx_
     with zipfile.ZipFile(xlsx_obj, 'r') as zip_ref:
         temp_dir = {name: zip_ref.read(name) for name in zip_ref.namelist()}
 
-    # Modify the workbook XML part in-memory
-    xml_obj = io.BytesIO(temp_dir['xl/workbook.xml'])
-    tree = etree.parse(xml_obj)
-    root = tree.getroot()
+    # Generate the hash
     hex_dig = generate_hex_dig(ext_user_username, semester_info)
     app.logger.info(f"Generated hex digest: {hex_dig}")
-    hidden_key = etree.Element('hiddenKey')
-    hidden_key.text = hex_dig
-    hidden_info = etree.Element('hiddenInfo')
-    hidden_info.text = f"{ext_user_username},{semester_info}"
-    root.append(hidden_key)
-    root.append(hidden_info)
-    xml_obj = io.BytesIO()
-    tree.write(xml_obj, xml_declaration=True, encoding='UTF-8')
-    xml_obj.seek(0)
-    temp_dir['xl/workbook.xml'] = xml_obj.read()
 
-    # Create a new XLSX file in-memory
+    # Create the custom XML content
+    root = etree.Element('root')
+    hidden_key = etree.SubElement(root, 'hiddenKey')
+    hidden_key.text = hex_dig
+    hidden_info = etree.SubElement(root, 'hiddenInfo')
+    hidden_info.text = f"{ext_user_username},{semester_info}"
+    tree = etree.ElementTree(root)
+
+    # Write the custom XML content to an in-memory file
+    custom_xml_obj = io.BytesIO()
+    tree.write(custom_xml_obj, xml_declaration=True, encoding='UTF-8')
+    custom_xml_obj.seek(0)
+
+    # Add the custom XML to the temp_dir
+    custom_xml_path = 'docProps/custom.xml'
+    temp_dir[custom_xml_path] = custom_xml_obj.read()
+
+    # Update the [Content_Types].xml to include the custom XML
+    content_types_xml = temp_dir['[Content_Types].xml']
+    content_tree = etree.fromstring(content_types_xml)
+    override = etree.Element(
+        'Override',
+        ContentType="application/vnd.openxmlformats-officedocument.customXmlProperties+xml",
+        PartName="/docProps/custom.xml",
+        xmlns="http://schemas.openxmlformats.org/package/2006/content-types"
+    )
+    content_tree.append(override)
+    content_types_obj = io.BytesIO()
+    etree.ElementTree(content_tree).write(content_types_obj, xml_declaration=True, encoding='UTF-8')
+    content_types_obj.seek(0)
+    temp_dir['[Content_Types].xml'] = content_types_obj.read()
+    
+    # Create a new XLSX file in-memory with the modified contents
     new_xlsx_obj = io.BytesIO()
     with zipfile.ZipFile(new_xlsx_obj, 'w') as zip_ref:
         for name, data in temp_dir.items():
