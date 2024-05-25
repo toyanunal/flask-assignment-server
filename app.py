@@ -36,21 +36,12 @@ def copy_file_in_s3(bucket, src_key, dst_key):
     s3_client.copy(copy_source, bucket, dst_key)
     app.logger.info(f"Copied {src_key} to {dst_key} in bucket {bucket}")
 
-# def upload_file_to_s3(bucket, key, file_path):
-#     app.logger.info(f"Uploading {file_path} to S3 bucket {bucket} at {key}")
-#     s3_client.upload_file(file_path, bucket, key)
-#     app.logger.info(f"Uploaded {file_path} to {key} in S3 bucket {bucket}")
-
 def delete_s3_folder(bucket, prefix):
     app.logger.info(f"Deleting files in S3 bucket {bucket} with prefix {prefix}")
     s3 = boto3.resource('s3')
     bucket = s3.Bucket(bucket)
     bucket.objects.filter(Prefix=prefix).delete()
     app.logger.info(f"Deleted files with prefix {prefix} in S3 bucket {bucket}")
-
-# def extract_number(text):
-#     numbers = re.findall(r'\d+', text)
-#     return numbers[0] if numbers else None
 
 def generate_random_number(ext_user_username, semester_info, max_number):
     combined_info = ext_user_username[1:] + semester_info
@@ -76,19 +67,22 @@ def embed_hidden_info_docx(docx_key, ext_user_username, semester_info, new_docx_
     with zipfile.ZipFile(docx_obj, 'r') as zip_ref:
         temp_dir = {name: zip_ref.read(name) for name in zip_ref.namelist()}
 
-    # Modify the custom XML part in-memory
+    # Modify the workbook XML part in-memory
+    xml_obj = io.BytesIO(temp_dir['customXml/item1.xml'])
+    tree = etree.parse(xml_obj)
+    root = tree.getroot()
     hex_dig = generate_hex_dig(ext_user_username, semester_info)
     app.logger.info(f"Generated hex digest: {hex_dig}")
-    root = etree.Element('root')
-    hidden_key = etree.SubElement(root, 'hiddenKey')
+    hidden_key = etree.Element('hiddenKey')
     hidden_key.text = hex_dig
-    hidden_info = etree.SubElement(root, 'hiddenInfo')
-    hidden_info.text = f"{ext_user_username}, {semester_info}"
-    tree = etree.ElementTree(root)
-    custom_xml_obj = io.BytesIO()
-    tree.write(custom_xml_obj, xml_declaration=True, encoding='UTF-8')
-    custom_xml_obj.seek(0)
-    temp_dir['customXml/item1.xml'] = custom_xml_obj.read()
+    hidden_info = etree.Element('hiddenInfo')
+    hidden_info.text = f"{ext_user_username},{semester_info}"
+    root.append(hidden_key)
+    root.append(hidden_info)
+    xml_obj = io.BytesIO()
+    tree.write(xml_obj, xml_declaration=True, encoding='UTF-8')
+    xml_obj.seek(0)
+    temp_dir['customXml/item1.xml'] = xml_obj.read()
 
     # Create a new DOCX file in-memory
     new_docx_obj = io.BytesIO()
@@ -116,21 +110,21 @@ def embed_hidden_info_xlsx(xlsx_key, ext_user_username, semester_info, new_xlsx_
         temp_dir = {name: zip_ref.read(name) for name in zip_ref.namelist()}
 
     # Modify the workbook XML part in-memory
-    workbook_xml_obj = io.BytesIO(temp_dir['xl/workbook.xml'])
-    tree = etree.parse(workbook_xml_obj)
+    xml_obj = io.BytesIO(temp_dir['xl/workbook.xml'])
+    tree = etree.parse(xml_obj)
     root = tree.getroot()
     hex_dig = generate_hex_dig(ext_user_username, semester_info)
     app.logger.info(f"Generated hex digest: {hex_dig}")
     hidden_key = etree.Element('hiddenKey')
     hidden_key.text = hex_dig
     hidden_info = etree.Element('hiddenInfo')
-    hidden_info.text = f"{ext_user_username}, {semester_info}"
+    hidden_info.text = f"{ext_user_username},{semester_info}"
     root.append(hidden_key)
     root.append(hidden_info)
-    workbook_xml_obj = io.BytesIO()
-    tree.write(workbook_xml_obj, xml_declaration=True, encoding='UTF-8')
-    workbook_xml_obj.seek(0)
-    temp_dir['xl/workbook.xml'] = workbook_xml_obj.read()
+    xml_obj = io.BytesIO()
+    tree.write(xml_obj, xml_declaration=True, encoding='UTF-8')
+    xml_obj.seek(0)
+    temp_dir['xl/workbook.xml'] = xml_obj.read()
 
     # Create a new XLSX file in-memory
     new_xlsx_obj = io.BytesIO()
