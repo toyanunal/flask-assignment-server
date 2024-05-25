@@ -80,8 +80,10 @@ def embed_hidden_info_docx(docx_key, ext_user_username, semester_info, new_docx_
     hex_dig = generate_hex_dig(ext_user_username, semester_info)
     app.logger.info(f"Generated hex digest: {hex_dig}")
     root = etree.Element('root')
+    hidden_key = etree.SubElement(root, 'hiddenKey')
+    hidden_key.text = hex_dig
     hidden_info = etree.SubElement(root, 'hiddenInfo')
-    hidden_info.text = hex_dig
+    hidden_info.text = f"{ext_user_username}, {semester_info}"
     tree = etree.ElementTree(root)
     custom_xml_obj = io.BytesIO()
     tree.write(custom_xml_obj, xml_declaration=True, encoding='UTF-8')
@@ -119,8 +121,11 @@ def embed_hidden_info_xlsx(xlsx_key, ext_user_username, semester_info, new_xlsx_
     root = tree.getroot()
     hex_dig = generate_hex_dig(ext_user_username, semester_info)
     app.logger.info(f"Generated hex digest: {hex_dig}")
+    hidden_key = etree.Element('hiddenKey')
+    hidden_key.text = hex_dig
     hidden_info = etree.Element('hiddenInfo')
-    hidden_info.text = hex_dig
+    hidden_info.text = f"{ext_user_username}, {semester_info}"
+    root.append(hidden_key)
     root.append(hidden_info)
     workbook_xml_obj = io.BytesIO()
     tree.write(workbook_xml_obj, xml_declaration=True, encoding='UTF-8')
@@ -221,6 +226,7 @@ def create_zip(ext_user_username, semester_info, hw_number):
 def initiate_download():
     token = secrets.token_urlsafe()
     session['download_token'] = token
+    app.logger.info(f"Token generated and stored in session: {token}")
     session['token_expiry'] = (datetime.now() + timedelta(minutes=1)).timestamp()
     session['token_uses'] = 0
 
@@ -262,8 +268,6 @@ def initiate_download():
     except Exception as e:
         app.logger.error(f"Error creating zip file: {str(e)}")
         return jsonify({"error": str(e)}), 500
-
-    app.logger.info(f"Token generated and stored in session: {token}")
     
     html_content = f'''
     <!DOCTYPE html>
@@ -317,7 +321,7 @@ def download_file():
 
     s3_output_key = session.get('filename')
     if not s3_output_key:
-        app.logger.error("Filename not found in session")
+        app.logger.error("Filename not found in session.")
         raise ValueError("Filename not found in session")
 
     response = s3_client.generate_presigned_url(
