@@ -75,12 +75,20 @@ def embed_hidden_info_docx(docx_key, ext_user_username, semester_info, new_docx_
     xml_obj = io.BytesIO(temp_dir['docProps/core.xml'])
     tree = etree.parse(xml_obj)
     root = tree.getroot()
-    hidden_key = etree.Element('hiddenKey')
+
+    # Create a custom namespace for the hidden key and info
+    custom_ns = "http://example.com/custom-properties"
+    etree.register_namespace("custom", custom_ns)
+
+    # Add the hidden key and info to the core.xml file
+    hidden_key = etree.Element("{http://example.com/custom-properties}hiddenKey")
     hidden_key.text = hex_dig
-    hidden_info = etree.Element('hiddenInfo')
+    hidden_info = etree.Element("{http://example.com/custom-properties}hiddenInfo")
     hidden_info.text = f"{ext_user_username},{semester_info}"
     root.append(hidden_key)
     root.append(hidden_info)
+
+    # Write the modified XML to a new in-memory file
     xml_obj = io.BytesIO()
     tree.write(xml_obj, xml_declaration=True, encoding='UTF-8')
     xml_obj.seek(0)
@@ -119,12 +127,20 @@ def embed_hidden_info_xlsx(xlsx_key, ext_user_username, semester_info, new_xlsx_
     xml_obj = io.BytesIO(temp_dir['docProps/core.xml'])
     tree = etree.parse(xml_obj)
     root = tree.getroot()
-    hidden_key = etree.Element('hiddenKey')
+
+    # Create a custom namespace for the hidden key and info
+    custom_ns = "http://example.com/custom-properties"
+    etree.register_namespace("custom", custom_ns)
+
+    # Add the hidden key and info to the core.xml file
+    hidden_key = etree.Element("{http://example.com/custom-properties}hiddenKey")
     hidden_key.text = hex_dig
-    hidden_info = etree.Element('hiddenInfo')
+    hidden_info = etree.Element("{http://example.com/custom-properties}hiddenInfo")
     hidden_info.text = f"{ext_user_username},{semester_info}"
     root.append(hidden_key)
     root.append(hidden_info)
+
+    # Write the modified XML to a new in-memory file
     xml_obj = io.BytesIO()
     tree.write(xml_obj, xml_declaration=True, encoding='UTF-8')
     xml_obj.seek(0)
