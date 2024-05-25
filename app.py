@@ -71,10 +71,17 @@ def embed_hidden_info_docx(docx_key, ext_user_username, semester_info, new_docx_
     hex_dig = generate_hex_dig(ext_user_username, semester_info)
     app.logger.info(f"Generated hex digest: {hex_dig}")
 
-    # Modify the workbook XML part in-memory
-    xml_obj = io.BytesIO(temp_dir['customXml/item1.xml'])
-    tree = etree.parse(xml_obj)
-    root = tree.getroot()
+    # Check if customXml/item1.xml exists
+    if 'customXml/item1.xml' in temp_dir:
+        xml_obj = io.BytesIO(temp_dir['customXml/item1.xml'])
+        tree = etree.parse(xml_obj)
+        root = tree.getroot()
+    else:
+        # Create a new XML structure if it doesn't exist
+        root = etree.Element('root')
+        tree = etree.ElementTree(root)
+
+    # Add hiddenKey and hiddenInfo elements to the XML
     hidden_key = etree.Element('hiddenKey')
     hidden_key.text = hex_dig
     hidden_info = etree.Element('hiddenInfo')
@@ -140,6 +147,34 @@ def embed_hidden_info_xlsx(xlsx_key, ext_user_username, semester_info, new_xlsx_
     tree.write(xml_obj, xml_declaration=True, encoding='UTF-8')
     xml_obj.seek(0)
     temp_dir['customXml/item1.xml'] = xml_obj.read()
+
+    # Update the [Content_Types].xml to include the custom XML
+    content_types_obj = io.BytesIO(temp_dir['[Content_Types].xml'])
+    content_types_tree = etree.parse(content_types_obj)
+    content_types_root = content_types_tree.getroot()
+
+    # Check if the custom XML part is already listed
+    custom_xml_found = False
+    for override in content_types_root.findall('{http://schemas.openxmlformats.org/package/2006/content-types}Override'):
+        if override.attrib['PartName'] == '/customXml/item1.xml':
+            custom_xml_found = True
+            break
+
+    # If not, add an entry for it
+    if not custom_xml_found:
+        override = etree.Element(
+            'Override',
+            ContentType="application/vnd.openxmlformats-officedocument.customXmlProperties+xml",
+            PartName="/customXml/item1.xml",
+            xmlns="http://schemas.openxmlformats.org/package/2006/content-types"
+        )
+        content_types_root.append(override)
+
+    # Write the modified [Content_Types].xml back to the in-memory file
+    content_types_obj = io.BytesIO()
+    content_types_tree.write(content_types_obj, xml_declaration=True, encoding='UTF-8')
+    content_types_obj.seek(0)
+    temp_dir['[Content_Types].xml'] = content_types_obj.read()
     
     # Create a new XLSX file in-memory with the modified contents
     new_xlsx_obj = io.BytesIO()
