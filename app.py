@@ -48,9 +48,9 @@ def delete_s3_folder(bucket, prefix):
     bucket.objects.filter(Prefix=prefix).delete()
     app.logger.info(f"Deleted files with prefix {prefix} in S3 bucket {bucket}")
 
-def extract_number(text):
-    numbers = re.findall(r'\d+', text)
-    return numbers[0] if numbers else None
+# def extract_number(text):
+#     numbers = re.findall(r'\d+', text)
+#     return numbers[0] if numbers else None
 
 def generate_random_number(ext_user_username, semester_info, max_number):
     combined_info = ext_user_username[1:] + semester_info
@@ -230,7 +230,8 @@ def initiate_download():
     # Extract assignment number from the form data
     custom_hw = request.form.get('custom_hw')
     resource_link_title = request.form.get('resource_link_title')
-    hw_number = extract_number(custom_hw) if custom_hw else extract_number(resource_link_title)
+    extract_first_digit = lambda text: re.findall(r'\d+', text)[0] if re.findall(r'\d+', text) else None
+    hw_number = extract_first_digit(custom_hw) if custom_hw else extract_first_digit(resource_link_title)
 
     if not hw_number:
         return jsonify({"error": "Assignment number not correctly provided"}), 400
