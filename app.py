@@ -1,8 +1,13 @@
-import zipfile, os, random, hashlib, re, secrets, boto3, logging, io
+import zipfile, os, random, hashlib, re, secrets, boto3, logging, io, openpyxl
 from lxml import etree
 from flask import Flask, session, request, jsonify, render_template_string, redirect
 from flask_session import Session
 from datetime import datetime, timedelta
+from openpyxl.styles import PatternFill
+from openpyxl.utils import get_column_letter
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives import padding
+from cryptography.hazmat.backends import default_backend
 
 app = Flask(__name__)
 
@@ -55,97 +60,6 @@ def generate_hex_dig(ext_user_username, semester_info):
     hex_dig = hash_object.hexdigest()
     return hex_dig
 
-
-
-def add_custom_property(root, name, value):
-    props = root.find('{http://schemas.openxmlformats.org/officeDocument/2006/extended-properties}Properties')
-    if props is None:
-        props = etree.Element('{http://schemas.openxmlformats.org/officeDocument/2006/extended-properties}Properties')
-        root.append(props)
-    
-    for prop in props.findall('{http://schemas.openxmlformats.org/officeDocument/2006/extended-properties}' + name):
-        props.remove(prop)
-    
-    custom_prop = etree.SubElement(props, '{http://schemas.openxmlformats.org/officeDocument/2006/extended-properties}' + name)
-    custom_prop.text = value
-
-def embed_hidden_info_xlsx(xlsx_key, ext_user_username, semester_info, new_xlsx_key):
-    app.logger.info(f"Embedding hidden info in XLSX file {xlsx_key}")
-
-    # Download the XLSX file to an in-memory file
-    xlsx_obj = io.BytesIO()
-    s3_client.download_fileobj(S3_BUCKET, xlsx_key, xlsx_obj)
-    xlsx_obj.seek(0)
-
-    # Extract the contents of the XLSX file to an in-memory zip
-    with zipfile.ZipFile(xlsx_obj, 'r') as zip_ref:
-        temp_dir = {name: zip_ref.read(name) for name in zip_ref.namelist()}
-
-    # Generate the hash
-    hex_dig = generate_hex_dig(ext_user_username, semester_info)
-    app.logger.info(f"Generated hex digest: {hex_dig}")
-
-    # Modify the custom properties XML part in-memory
-    if '[Content_Types].xml' in temp_dir:
-        content_types_obj = io.BytesIO(temp_dir['[Content_Types].xml'])
-        content_types_tree = etree.parse(content_types_obj)
-        content_types_root = content_types_tree.getroot()
-    else:
-        raise ValueError("Content_Types.xml not found in the XLSX file.")
-
-    # Check if the custom properties part is already listed
-    custom_props_found = False
-    for override in content_types_root.findall('{http://schemas.openxmlformats.org/package/2006/content-types}Override'):
-        if override.attrib['PartName'] == '/docProps/custom.xml':
-            custom_props_found = True
-            break
-
-    # If not, add an entry for it
-    if not custom_props_found:
-        override = etree.Element(
-            'Override',
-            ContentType="application/vnd.openxmlformats-officedocument.custom-properties+xml",
-            PartName="/docProps/custom.xml",
-            xmlns="http://schemas.openxmlformats.org/package/2006/content-types"
-        )
-        content_types_root.append(override)
-
-    # Write the modified [Content_Types].xml back to the in-memory file
-    content_types_obj = io.BytesIO()
-    content_types_tree.write(content_types_obj, xml_declaration=True, encoding='UTF-8')
-    content_types_obj.seek(0)
-    temp_dir['[Content_Types].xml'] = content_types_obj.read()
-
-    # Add custom properties to the properties XML
-    if 'docProps/custom.xml' in temp_dir:
-        custom_props_obj = io.BytesIO(temp_dir['docProps/custom.xml'])
-        custom_props_tree = etree.parse(custom_props_obj)
-        custom_props_root = custom_props_tree.getroot()
-    else:
-        custom_props_root = etree.Element('{http://schemas.openxmlformats.org/officeDocument/2006/extended-properties}Properties')
-        custom_props_tree = etree.ElementTree(custom_props_root)
-
-    add_custom_property(custom_props_root, 'hiddenKey', hex_dig)
-    add_custom_property(custom_props_root, 'hiddenInfo', f"{ext_user_username},{semester_info}")
-
-    custom_props_obj = io.BytesIO()
-    custom_props_tree.write(custom_props_obj, xml_declaration=True, encoding='UTF-8')
-    custom_props_obj.seek(0)
-    temp_dir['docProps/custom.xml'] = custom_props_obj.read()
-
-    # Create a new XLSX file in-memory with the modified contents
-    new_xlsx_obj = io.BytesIO()
-    with zipfile.ZipFile(new_xlsx_obj, 'w') as zip_ref:
-        for name, data in temp_dir.items():
-            zip_ref.writestr(name, data)
-    new_xlsx_obj.seek(0)
-
-    # Upload the modified XLSX file to S3
-    s3_client.upload_fileobj(new_xlsx_obj, S3_BUCKET, new_xlsx_key)
-    app.logger.info(f"Uploaded modified XLSX to {new_xlsx_key}")
-
-    return new_xlsx_key
-
 def embed_hidden_info_docx(docx_key, ext_user_username, semester_info, new_docx_key):
     app.logger.info(f"Embedding hidden info in DOCX file {docx_key}")
 
@@ -162,53 +76,24 @@ def embed_hidden_info_docx(docx_key, ext_user_username, semester_info, new_docx_
     hex_dig = generate_hex_dig(ext_user_username, semester_info)
     app.logger.info(f"Generated hex digest: {hex_dig}")
 
-    # Modify the custom properties XML part in-memory
-    if '[Content_Types].xml' in temp_dir:
-        content_types_obj = io.BytesIO(temp_dir['[Content_Types].xml'])
-        content_types_tree = etree.parse(content_types_obj)
-        content_types_root = content_types_tree.getroot()
-    else:
-        raise ValueError("Content_Types.xml not found in the DOCX file.")
+    # Create an in-memory file from the customXml/item1.xml
+    xml_obj = io.BytesIO(temp_dir['customXml/item1.xml'])
+    tree = etree.parse(xml_obj)
+    root = tree.getroot()
 
-    # Check if the custom properties part is already listed
-    custom_props_found = False
-    for override in content_types_root.findall('{http://schemas.openxmlformats.org/package/2006/content-types}Override'):
-        if override.attrib['PartName'] == '/docProps/custom.xml':
-            custom_props_found = True
-            break
+    # Add hiddenKey and hiddenInfo elements to the XML
+    hidden_key = etree.Element('hiddenKey')
+    hidden_key.text = hex_dig
+    hidden_info = etree.Element('hiddenInfo')
+    hidden_info.text = f"{ext_user_username},{semester_info}"
+    root.append(hidden_key)
+    root.append(hidden_info)
 
-    # If not, add an entry for it
-    if not custom_props_found:
-        override = etree.Element(
-            'Override',
-            ContentType="application/vnd.openxmlformats-officedocument.custom-properties+xml",
-            PartName="/docProps/custom.xml",
-            xmlns="http://schemas.openxmlformats.org/package/2006/content-types"
-        )
-        content_types_root.append(override)
-
-    # Write the modified [Content_Types].xml back to the in-memory file
-    content_types_obj = io.BytesIO()
-    content_types_tree.write(content_types_obj, xml_declaration=True, encoding='UTF-8')
-    content_types_obj.seek(0)
-    temp_dir['[Content_Types].xml'] = content_types_obj.read()
-
-    # Add custom properties to the properties XML
-    if 'docProps/custom.xml' in temp_dir:
-        custom_props_obj = io.BytesIO(temp_dir['docProps/custom.xml'])
-        custom_props_tree = etree.parse(custom_props_obj)
-        custom_props_root = custom_props_tree.getroot()
-    else:
-        custom_props_root = etree.Element('{http://schemas.openxmlformats.org/officeDocument/2006/extended-properties}Properties')
-        custom_props_tree = etree.ElementTree(custom_props_root)
-
-    add_custom_property(custom_props_root, 'hiddenKey', hex_dig)
-    add_custom_property(custom_props_root, 'hiddenInfo', f"{ext_user_username},{semester_info}")
-
-    custom_props_obj = io.BytesIO()
-    custom_props_tree.write(custom_props_obj, xml_declaration=True, encoding='UTF-8')
-    custom_props_obj.seek(0)
-    temp_dir['docProps/custom.xml'] = custom_props_obj.read()
+    # Write the modified XML to a new in-memory file
+    xml_obj = io.BytesIO()
+    tree.write(xml_obj, xml_declaration=True, encoding='UTF-8')
+    xml_obj.seek(0)
+    temp_dir['customXml/item1.xml'] = xml_obj.read()
 
     # Create a new DOCX file in-memory with the modified contents
     new_docx_obj = io.BytesIO()
@@ -223,147 +108,62 @@ def embed_hidden_info_docx(docx_key, ext_user_username, semester_info, new_docx_
 
     return new_docx_key
 
+def encrypt_data(data, key):
+    padder = padding.PKCS7(algorithms.AES.block_size).padder()
+    padded_data = padder.update(data.encode()) + padder.finalize()
+    iv = os.urandom(16)
+    cipher = Cipher(algorithms.AES(key), modes.CFB(iv), backend=default_backend())
+    encryptor = cipher.encryptor()
+    encrypted_data = encryptor.update(padded_data) + encryptor.finalize()
+    return iv + encrypted_data
 
+def add_hidden_worksheet(workbook, data, key, sheet_name="Null"):
+    encrypted_data = encrypt_data(data, key)
+    hidden_ws = workbook.create_sheet(title=sheet_name)
+    hidden_ws.sheet_state = 'hidden'
 
-# def embed_hidden_info_docx(docx_key, ext_user_username, semester_info, new_docx_key):
-#     app.logger.info(f"Embedding hidden info in DOCX file {docx_key}")
+    white_fill = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
 
-#     # Download the DOCX file to an in-memory file
-#     docx_obj = io.BytesIO()
-#     s3_client.download_fileobj(S3_BUCKET, docx_key, docx_obj)
-#     docx_obj.seek(0)
+    for i in range(len(encrypted_data)):
+        cell = hidden_ws.cell(row=1, column=i + 1, value=encrypted_data[i])
+        cell.fill = white_fill
 
-#     # Extract the contents of the DOCX file to an in-memory zip
-#     with zipfile.ZipFile(docx_obj, 'r') as zip_ref:
-#         temp_dir = {name: zip_ref.read(name) for name in zip_ref.namelist()}
+def embed_hidden_info_xlsx(xlsx_key, ext_user_username, semester_info, new_xlsx_key):
+    app.logger.info(f"Embedding hidden info in XLSX file {xlsx_key}")
 
-#     # Generate the hash
-#     hex_dig = generate_hex_dig(ext_user_username, semester_info)
-#     app.logger.info(f"Generated hex digest: {hex_dig}")
+    # Download the XLSX file to an in-memory file
+    xlsx_obj = io.BytesIO()
+    s3_client.download_fileobj(S3_BUCKET, xlsx_key, xlsx_obj)
+    xlsx_obj.seek(0)
 
-#     # Check if customXml/item1.xml exists
-#     if 'customXml/item1.xml' in temp_dir:
-#         xml_obj = io.BytesIO(temp_dir['customXml/item1.xml'])
-#         tree = etree.parse(xml_obj)
-#         root = tree.getroot()
-#     else:
-#         # Create a new XML structure if it doesn't exist
-#         root = etree.Element('root')
-#         tree = etree.ElementTree(root)
+    # Load the workbook
+    workbook = openpyxl.load_workbook(xlsx_obj)
 
-#     # Add hiddenKey and hiddenInfo elements to the XML
-#     hidden_key = etree.Element('hiddenKey')
-#     hidden_key.text = hex_dig
-#     hidden_info = etree.Element('hiddenInfo')
-#     hidden_info.text = f"{ext_user_username},{semester_info}"
-#     root.append(hidden_key)
-#     root.append(hidden_info)
+    # Generate the AES-256 key and data
+    key = os.urandom(32)
+    data = f"ext_user_username[1:],semester_info"
 
-#     # Write the modified XML to a new in-memory file
-#     xml_obj = io.BytesIO()
-#     tree.write(xml_obj, xml_declaration=True, encoding='UTF-8')
-#     xml_obj.seek(0)
-#     temp_dir['customXml/item1.xml'] = xml_obj.read()
+    # Add the hidden worksheet with encrypted data
+    add_hidden_worksheet(workbook, data, key)
 
-#     # Create a new DOCX file in-memory with the modified contents
-#     new_docx_obj = io.BytesIO()
-#     with zipfile.ZipFile(new_docx_obj, 'w') as zip_ref:
-#         for name, data in temp_dir.items():
-#             zip_ref.writestr(name, data)
-#     new_docx_obj.seek(0)
+    # Save the workbook to an in-memory file
+    new_xlsx_obj = io.BytesIO()
+    workbook.save(new_xlsx_obj)
+    new_xlsx_obj.seek(0)
 
-#     # Upload the modified DOCX file to S3
-#     s3_client.upload_fileobj(new_docx_obj, S3_BUCKET, new_docx_key)
-#     app.logger.info(f"Uploaded modified DOCX to {new_docx_key}")
+    # Upload the modified XLSX file to S3
+    s3_client.upload_fileobj(new_xlsx_obj, S3_BUCKET, new_xlsx_key)
+    app.logger.info(f"Uploaded modified XLSX to {new_xlsx_key}")
 
-#     return new_docx_key
-
-# def embed_hidden_info_xlsx(xlsx_key, ext_user_username, semester_info, new_xlsx_key):
-#     app.logger.info(f"Embedding hidden info in XLSX file {xlsx_key}")
-
-#     # Download the XLSX file to an in-memory file
-#     xlsx_obj = io.BytesIO()
-#     s3_client.download_fileobj(S3_BUCKET, xlsx_key, xlsx_obj)
-#     xlsx_obj.seek(0)
-
-#     # Extract the contents of the XLSX file to an in-memory zip
-#     with zipfile.ZipFile(xlsx_obj, 'r') as zip_ref:
-#         temp_dir = {name: zip_ref.read(name) for name in zip_ref.namelist()}
-
-#     # Generate the hash
-#     hex_dig = generate_hex_dig(ext_user_username, semester_info)
-#     app.logger.info(f"Generated hex digest: {hex_dig}")
-
-#     # Check if customXml/item1.xml exists
-#     if 'customXml/item1.xml' in temp_dir:
-#         xml_obj = io.BytesIO(temp_dir['customXml/item1.xml'])
-#         tree = etree.parse(xml_obj)
-#         root = tree.getroot()
-#     else:
-#         # Create a new XML structure if it doesn't exist
-#         root = etree.Element('root')
-#         tree = etree.ElementTree(root)
-
-#     # Add hiddenKey and hiddenInfo elements to the XML
-#     hidden_key = etree.Element('hiddenKey')
-#     hidden_key.text = hex_dig
-#     hidden_info = etree.Element('hiddenInfo')
-#     hidden_info.text = f"{ext_user_username},{semester_info}"
-#     root.append(hidden_key)
-#     root.append(hidden_info)
-
-#     # Write the modified XML to a new in-memory file
-#     xml_obj = io.BytesIO()
-#     tree.write(xml_obj, xml_declaration=True, encoding='UTF-8')
-#     xml_obj.seek(0)
-#     temp_dir['customXml/item1.xml'] = xml_obj.read()
-
-#     # Update the [Content_Types].xml to include the custom XML
-#     content_types_obj = io.BytesIO(temp_dir['[Content_Types].xml'])
-#     content_types_tree = etree.parse(content_types_obj)
-#     content_types_root = content_types_tree.getroot()
-
-#     # Check if the custom XML part is already listed
-#     custom_xml_found = False
-#     for override in content_types_root.findall('{http://schemas.openxmlformats.org/package/2006/content-types}Override'):
-#         if override.attrib['PartName'] == '/customXml/item1.xml':
-#             custom_xml_found = True
-#             break
-
-#     # If not, add an entry for it
-#     if not custom_xml_found:
-#         override = etree.Element(
-#             'Override',
-#             ContentType="application/vnd.openxmlformats-officedocument.customXmlProperties+xml",
-#             PartName="/customXml/item1.xml",
-#             xmlns="http://schemas.openxmlformats.org/package/2006/content-types"
-#         )
-#         content_types_root.append(override)
-
-#     # Write the modified [Content_Types].xml back to the in-memory file
-#     content_types_obj = io.BytesIO()
-#     content_types_tree.write(content_types_obj, xml_declaration=True, encoding='UTF-8')
-#     content_types_obj.seek(0)
-#     temp_dir['[Content_Types].xml'] = content_types_obj.read()
-    
-#     # Create a new XLSX file in-memory with the modified contents
-#     new_xlsx_obj = io.BytesIO()
-#     with zipfile.ZipFile(new_xlsx_obj, 'w') as zip_ref:
-#         for name, data in temp_dir.items():
-#             zip_ref.writestr(name, data)
-#     new_xlsx_obj.seek(0)
-
-#     # Upload the modified XLSX file to S3
-#     s3_client.upload_fileobj(new_xlsx_obj, S3_BUCKET, new_xlsx_key)
-#     app.logger.info(f"Uploaded modified XLSX to {new_xlsx_key}")
-
-#     return new_xlsx_key
+    return new_xlsx_key
 
 def create_zip(ext_user_username, semester_info, hw_number):
+    # Define the S3 source and destination directories
     temp_dir = 'temp/'
     output_dir = 'output/'
     s3_src_dir = f'assignment{hw_number}_files/'
 
+    # Clean up the temp and output directories in S3
     app.logger.info("Cleaning up temp and output directories in S3")
     delete_s3_folder(S3_BUCKET, temp_dir)
     delete_s3_folder(S3_BUCKET, output_dir)
@@ -430,6 +230,7 @@ def create_zip(ext_user_username, semester_info, hw_number):
             app.logger.info(f"Created ZIP file with {modified_xlsx_key} and {txt_dst_key}")
         zip_buffer.seek(0)
 
+    # Upload the ZIP file to S3
     s3_output_key = f'output/ASSIGNMENT_{hw_number}_{ext_user_username[1:]}.zip'
     app.logger.info(f"Uploading ZIP file to S3 at {s3_output_key}")
     s3_client.upload_fileobj(zip_buffer, S3_BUCKET, s3_output_key)
