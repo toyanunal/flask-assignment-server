@@ -1,4 +1,4 @@
-import zipfile, os, shutil, random, hashlib, re, secrets, boto3, logging, io
+import zipfile, os, random, hashlib, re, secrets, boto3, logging, io
 from lxml import etree
 from flask import Flask, session, request, jsonify, render_template_string, redirect
 from flask_session import Session
@@ -202,6 +202,9 @@ def initiate_download():
     session['download_token'] = token
     session['token_expiry'] = (datetime.now() + timedelta(minutes=1)).timestamp()
     session['token_uses'] = 0
+
+    # Print the form data for debugging
+    app.logger.info(f"Form Data: {request.form}")
 
     custom_hw = request.form.get('custom_hw')
     resource_link_title = request.form.get('resource_link_title')
