@@ -1,13 +1,10 @@
-import zipfile, os, random, hashlib, re, secrets, boto3, logging, io, openpyxl
+import zipfile, os, random, hashlib, re, secrets, boto3, logging, io, openpyxl, base64
 from lxml import etree
 from flask import Flask, session, request, jsonify, render_template_string, redirect
 from flask_session import Session
 from datetime import datetime, timedelta
-from openpyxl.styles import PatternFill
-from openpyxl.utils import get_column_letter
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from cryptography.hazmat.primitives import padding
-from cryptography.hazmat.backends import default_backend
+from openpyxl.styles import Font
+from cryptography.fernet import Fernet
 
 app = Flask(__name__)
 
@@ -108,25 +105,12 @@ def embed_hidden_info_docx(docx_key, ext_user_username, semester_info, new_docx_
 
     return new_docx_key
 
-def encrypt_data(data, key):
-    padder = padding.PKCS7(algorithms.AES.block_size).padder()
-    padded_data = padder.update(data.encode()) + padder.finalize()
-    iv = os.urandom(16)
-    cipher = Cipher(algorithms.AES(key), modes.CFB(iv), backend=default_backend())
-    encryptor = cipher.encryptor()
-    encrypted_data = encryptor.update(padded_data) + encryptor.finalize()
-    return iv + encrypted_data
+def generate_key(secret):
+    return base64.urlsafe_b64encode(hashlib.sha256(secret.encode()).digest())
 
-def add_hidden_worksheet(workbook, data, key, sheet_name="Null"):
-    encrypted_data = encrypt_data(data, key)
-    hidden_ws = workbook.create_sheet(title=sheet_name)
-    hidden_ws.sheet_state = 'hidden'
-
-    white_fill = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
-
-    for i in range(len(encrypted_data)):
-        cell = hidden_ws.cell(row=1, column=i + 1, value=encrypted_data[i])
-        cell.fill = white_fill
+def encrypt_text(text, key):
+    fernet = Fernet(key)
+    return fernet.encrypt(text.encode()).decode()
 
 def embed_hidden_info_xlsx(xlsx_key, ext_user_username, semester_info, new_xlsx_key):
     app.logger.info(f"Embedding hidden info in XLSX file {xlsx_key}")
@@ -136,17 +120,23 @@ def embed_hidden_info_xlsx(xlsx_key, ext_user_username, semester_info, new_xlsx_
     s3_client.download_fileobj(S3_BUCKET, xlsx_key, xlsx_obj)
     xlsx_obj.seek(0)
 
-    # Load the workbook
+    # Load the workbook and create a hidden worksheet
     workbook = openpyxl.load_workbook(xlsx_obj)
+    hidden_sheet = workbook.create_sheet(title="(null)", index=0)
 
-    # Generate the AES-256 key and data
-    key = os.urandom(32)
-    data = f"ext_user_username[1:],semester_info"
+    # Generate the encrypted information
+    combined_info = f"{ext_user_username[1:]},{semester_info}"
+    key = generate_key('IS100')  # Replace this with a secret key
+    encrypted_info = encrypt_text(combined_info, key)
 
-    # Add the hidden worksheet with encrypted data
-    add_hidden_worksheet(workbook, data, key)
+    # Write the encrypted information to the hidden worksheet
+    hidden_sheet['A1'] = encrypted_info
 
-    # Save the workbook to an in-memory file
+    # Set the font color to white to hide the text
+    white_font = Font(color="FFFFFF")
+    hidden_sheet['A1'].font = white_font
+
+    # Save the workbook to a new in-memory file
     new_xlsx_obj = io.BytesIO()
     workbook.save(new_xlsx_obj)
     new_xlsx_obj.seek(0)
