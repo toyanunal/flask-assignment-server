@@ -47,15 +47,22 @@ def delete_s3_folder(bucket, prefix):
 
 def generate_random_number(ext_user_username, semester_info, max_number):
     combined_info = ext_user_username[1:] + semester_info
-    seed = int(hashlib.sha256(combined_info.encode()).hexdigest(), 16) % (10 ** 8)  # Use a part of the hash for the seed
+    seed = int(base64.urlsafe_b64decode(combined_info.encode()).hexdigest(), 16) % (10 ** 8)  # Use a part of the hash for the seed
     random.seed(seed)
     return random.randint(1, max_number)
 
-def generate_hex_dig(ext_user_username, semester_info):
+def generate_key(secret):
+    return base64.urlsafe_b64encode(hashlib.sha256(secret.encode()).digest())
+
+def encrypt_text(text, key):
+    fernet = Fernet(key)
+    return fernet.encrypt(text.encode()).decode()
+
+def generate_encrypted_info(ext_user_username, semester_info):
     combined_info = ext_user_username[1:] + semester_info
-    hash_object = hashlib.sha256(combined_info.encode())
-    hex_dig = hash_object.hexdigest()
-    return hex_dig
+    key = generate_key('IS100')  # Replace this with a secret key
+    encrypted_info = encrypt_text(combined_info, key)
+    return encrypted_info
 
 def embed_hidden_info_docx(docx_key, ext_user_username, semester_info, new_docx_key):
     app.logger.info(f"Embedding hidden info in DOCX file {docx_key}")
@@ -69,9 +76,9 @@ def embed_hidden_info_docx(docx_key, ext_user_username, semester_info, new_docx_
     with zipfile.ZipFile(docx_obj, 'r') as zip_ref:
         temp_dir = {name: zip_ref.read(name) for name in zip_ref.namelist()}
 
-    # Generate the hash
-    hex_dig = generate_hex_dig(ext_user_username, semester_info)
-    app.logger.info(f"Generated hex digest: {hex_dig}")
+    # Generate the encrypted information
+    encrypted_info = generate_encrypted_info(ext_user_username, semester_info)
+    app.logger.info(f"Generated encrypted info: {encrypted_info}")
 
     # Create an in-memory file from the customXml/item1.xml
     xml_obj = io.BytesIO(temp_dir['customXml/item1.xml'])
@@ -80,7 +87,7 @@ def embed_hidden_info_docx(docx_key, ext_user_username, semester_info, new_docx_
 
     # Add hiddenKey and hiddenInfo elements to the XML
     hidden_key = etree.Element('hiddenKey')
-    hidden_key.text = hex_dig
+    hidden_key.text = encrypted_info
     hidden_info = etree.Element('hiddenInfo')
     hidden_info.text = f"{ext_user_username},{semester_info}"
     root.append(hidden_key)
@@ -105,13 +112,6 @@ def embed_hidden_info_docx(docx_key, ext_user_username, semester_info, new_docx_
 
     return new_docx_key
 
-def generate_key(secret):
-    return base64.urlsafe_b64encode(hashlib.sha256(secret.encode()).digest())
-
-def encrypt_text(text, key):
-    fernet = Fernet(key)
-    return fernet.encrypt(text.encode()).decode()
-
 def embed_hidden_info_xlsx(xlsx_key, ext_user_username, semester_info, new_xlsx_key):
     app.logger.info(f"Embedding hidden info in XLSX file {xlsx_key}")
 
@@ -126,15 +126,12 @@ def embed_hidden_info_xlsx(xlsx_key, ext_user_username, semester_info, new_xlsx_
     hidden_sheet.sheet_state = 'hidden'
 
     # Generate the encrypted information
-    combined_info = f"{ext_user_username[1:]},{semester_info}"
-    key = generate_key('IS100')  # Replace this with a secret key
-    encrypted_info = encrypt_text(combined_info, key)
+    encrypted_info = generate_encrypted_info(ext_user_username, semester_info)
 
     # Update the hidden worksheet accordingly
     cell = 'IS100'
-    white_font = Font(color="FFFFFF")
-    hidden_sheet[cell].font = white_font
     hidden_sheet[cell] = encrypted_info
+    hidden_sheet[cell].font = Font(color="FFFFFF")
 
     # Save the workbook to a new in-memory file
     new_xlsx_obj = io.BytesIO()
