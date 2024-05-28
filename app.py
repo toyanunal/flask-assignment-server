@@ -130,12 +130,11 @@ def embed_hidden_info_xlsx(xlsx_key, ext_user_username, semester_info, new_xlsx_
     key = generate_key('IS100')  # Replace this with a secret key
     encrypted_info = encrypt_text(combined_info, key)
 
-    # Write the encrypted information to the hidden worksheet
-    hidden_sheet['A1'] = encrypted_info
-
-    # Set the font color to white to hide the text
+    # Update the hidden worksheet accordingly
+    cell = 'IS100'
     white_font = Font(color="FFFFFF")
-    hidden_sheet['A1'].font = white_font
+    hidden_sheet[cell].font = white_font
+    hidden_sheet[cell] = encrypted_info
 
     # Save the workbook to a new in-memory file
     new_xlsx_obj = io.BytesIO()
