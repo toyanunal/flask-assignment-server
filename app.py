@@ -5,14 +5,14 @@ from flask_session import Session
 from datetime import datetime, timedelta
 from openpyxl.styles import Font
 from cryptography.fernet import Fernet
-from keys.config import FLASK_SECRET_KEY, ENCRYPTION_SECRET_KEY
+from keys.config import FLASK_SECRET_KEY, ENCRYPTION_SECRET_KEY, HIDDEN_INFO_CELL
 
 app = Flask(__name__)
 
 # Configure session to use filesystem (not default, which uses signed cookies)
 app.config['SESSION_TYPE'] = 'filesystem'
 app.config['SESSION_FILE_DIR'] = './.flask_session/'
-app.config['SECRET_KEY'] = FLASK_SECRET_KEY  # Use the secure random key from the config file
+app.config['SECRET_KEY'] = os.urandom(24)  # Use the secure random key from the config file
 
 # Initialize Session
 Session(app)
@@ -32,6 +32,10 @@ formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(messag
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 logger.setLevel(logging.INFO)
+
+# log app.config['SECRET_KEY']
+FLASK_SECRET_KEY = os.urandom(24)
+app.logger.info(f"Flask secret key: {FLASK_SECRET_KEY}")
 
 def copy_file_in_s3(bucket, src_key, dst_key):
     copy_source = {'Bucket': bucket, 'Key': src_key}
@@ -129,7 +133,7 @@ def embed_hidden_info_xlsx(xlsx_key, ext_user_username, semester_info, new_xlsx_
     app.logger.info(f"Generated encrypted info: {encrypted_info}")
 
     # Update the hidden worksheet accordingly
-    cell = 'IS100'  # Writing to cell IS100
+    cell = HIDDEN_INFO_CELL
     hidden_sheet[cell] = encrypted_info
     hidden_sheet[cell].font = Font(color="FFFFFF")
 
