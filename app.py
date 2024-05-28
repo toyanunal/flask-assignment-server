@@ -209,7 +209,7 @@ def create_zip(ext_user_username, semester_info, hw_number):
 
             with io.BytesIO() as txt_data:
                 s3_client.download_fileobj(S3_BUCKET, txt_dst_key, txt_data)
-                txt_data.seek 0
+                txt_data.seek(0)
                 zipf.writestr(f'IS100_Assignment{hw_number}_Data.txt', txt_data.read())
 
             app.logger.info(f"Created ZIP file with {modified_xlsx_key} and {txt_dst_key}")
