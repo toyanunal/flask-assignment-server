@@ -122,7 +122,8 @@ def embed_hidden_info_xlsx(xlsx_key, ext_user_username, semester_info, new_xlsx_
 
     # Load the workbook and create a hidden worksheet
     workbook = openpyxl.load_workbook(xlsx_obj)
-    hidden_sheet = workbook.create_sheet(title="(null)", index=0)
+    hidden_sheet = workbook.create_sheet(title="(null)")
+    hidden_sheet.sheet_state = 'hidden'
 
     # Generate the encrypted information
     combined_info = f"{ext_user_username[1:]},{semester_info}"
