@@ -5,13 +5,14 @@ from flask_session import Session
 from datetime import datetime, timedelta
 from openpyxl.styles import Font
 from cryptography.fernet import Fernet
+from keys.config import FLASK_SECRET_KEY, ENCRYPTION_SECRET_KEY
 
 app = Flask(__name__)
 
 # Configure session to use filesystem (not default, which uses signed cookies)
 app.config['SESSION_TYPE'] = 'filesystem'
 app.config['SESSION_FILE_DIR'] = './.flask_session/'
-app.config['SECRET_KEY'] = os.urandom(24)  # Use a secure random key
+app.config['SECRET_KEY'] = FLASK_SECRET_KEY  # Use a secure random key
 
 # Initialize Session
 Session(app)
@@ -47,12 +48,11 @@ def delete_s3_folder(bucket, prefix):
 
 def generate_random_number(ext_user_username, semester_info, max_number):
     combined_info = ext_user_username[1:] + semester_info
-    seed = int.from_bytes(base64.urlsafe_b64decode(base64.urlsafe_b64encode(combined_info.encode())), 'big') % (10 ** 8)
+    seed = int(hashlib.sha256(combined_info.encode()).hexdigest(), 16) % (10 ** 8)  # Use a part of the hash for the seed
     random.seed(seed)
-    return random.randint(1, max_number)
-
-def generate_key(secret):
-    return base64.urlsafe_b64encode(hashlib.sha256(secret.encode()).digest())
+    random_number = random.randint(1, max_number)
+    app.logger.info(f"Generated random number: {random_number}")                    
+    return random_number
 
 def encrypt_text(text, key):
     fernet = Fernet(key)
@@ -60,8 +60,7 @@ def encrypt_text(text, key):
 
 def generate_encrypted_info(ext_user_username, semester_info):
     combined_info = ext_user_username[1:] + semester_info
-    key = generate_key('IS100')  # Replace this with a secret key
-    encrypted_info = encrypt_text(combined_info, key)
+    encrypted_info = encrypt_text(combined_info, ENCRYPTION_SECRET_KEY)
     return encrypted_info
 
 def embed_hidden_info_docx(docx_key, ext_user_username, semester_info, new_docx_key):
@@ -130,7 +129,7 @@ def embed_hidden_info_xlsx(xlsx_key, ext_user_username, semester_info, new_xlsx_
     app.logger.info(f"Generated encrypted info: {encrypted_info}")
 
     # Update the hidden worksheet accordingly
-    cell = 'A1'  # Writing to cell A1 named "IS100"
+    cell = 'IS100'  # Writing to cell IS100
     hidden_sheet[cell] = encrypted_info
     hidden_sheet[cell].font = Font(color="FFFFFF")
 
@@ -158,7 +157,6 @@ def create_zip(ext_user_username, semester_info, hw_number):
 
     if hw_number == '1':
         random_number = generate_random_number(ext_user_username, semester_info, 9)
-        app.logger.info(f"Random number generated: {random_number}")
 
         doc_key = f'{s3_src_dir}IS100_Assignment{hw_number}_Type{random_number}_Text.docx'
         pdf_key = f'{s3_src_dir}IS100_Assignment{hw_number}_Type{random_number}_Question.pdf'
@@ -189,7 +187,6 @@ def create_zip(ext_user_username, semester_info, hw_number):
 
     elif hw_number == '2':
         random_number = generate_random_number(ext_user_username, semester_info, 2)
-        app.logger.info(f"Random number generated: {random_number}")
     
         xlsx_key = f'{s3_src_dir}IS100_Assignment{hw_number}_Type{random_number}_Question.xlsx'
         txt_key = f'{s3_src_dir}IS100_Assignment{hw_number}_Type{random_number}_Data.txt'
