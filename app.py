@@ -12,7 +12,7 @@ app = Flask(__name__)
 # Configure session to use filesystem (not default, which uses signed cookies)
 app.config['SESSION_TYPE'] = 'filesystem'
 app.config['SESSION_FILE_DIR'] = './.flask_session/'
-app.config['SECRET_KEY'] = os.urandom(24)  # Use the secure random key from the config file
+app.config['SECRET_KEY'] = os.urandom(24) #FLASK_SECRET_KEY  # Use the secure random key from the config file
 
 # Initialize Session
 Session(app)
@@ -64,7 +64,7 @@ def encrypt_text(text, key):
 
 def generate_encrypted_info(ext_user_username, semester_info):
     combined_info = ext_user_username[1:] + semester_info
-    encrypted_info = encrypt_text(combined_info, ENCRYPTION_SECRET_KEY)
+    encrypted_info = encrypt_text(combined_info, 'IS100') #ENCRYPTION_SECRET_KEY
     return encrypted_info
 
 def embed_hidden_info_docx(docx_key, ext_user_username, semester_info, new_docx_key):
@@ -133,7 +133,7 @@ def embed_hidden_info_xlsx(xlsx_key, ext_user_username, semester_info, new_xlsx_
     app.logger.info(f"Generated encrypted info: {encrypted_info}")
 
     # Update the hidden worksheet accordingly
-    cell = HIDDEN_INFO_CELL
+    cell = 'IS100' #HIDDEN_INFO_CELL
     hidden_sheet[cell] = encrypted_info
     hidden_sheet[cell].font = Font(color="FFFFFF")
 
