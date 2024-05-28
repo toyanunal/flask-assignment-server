@@ -47,7 +47,7 @@ def delete_s3_folder(bucket, prefix):
 
 def generate_random_number(ext_user_username, semester_info, max_number):
     combined_info = ext_user_username[1:] + semester_info
-    seed = int(base64.urlsafe_b64decode(combined_info.encode()).hexdigest(), 16) % (10 ** 8)  # Use a part of the hash for the seed
+    seed = int.from_bytes(base64.urlsafe_b64decode(base64.urlsafe_b64encode(combined_info.encode())), 'big') % (10 ** 8)
     random.seed(seed)
     return random.randint(1, max_number)
 
@@ -127,9 +127,10 @@ def embed_hidden_info_xlsx(xlsx_key, ext_user_username, semester_info, new_xlsx_
 
     # Generate the encrypted information
     encrypted_info = generate_encrypted_info(ext_user_username, semester_info)
+    app.logger.info(f"Generated encrypted info: {encrypted_info}")
 
     # Update the hidden worksheet accordingly
-    cell = 'IS100'
+    cell = 'A1'  # Writing to cell A1 named "IS100"
     hidden_sheet[cell] = encrypted_info
     hidden_sheet[cell].font = Font(color="FFFFFF")
 
