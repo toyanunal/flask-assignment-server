@@ -12,7 +12,7 @@ app = Flask(__name__)
 # Configure session to use filesystem (not default, which uses signed cookies)
 app.config['SESSION_TYPE'] = 'filesystem'
 app.config['SESSION_FILE_DIR'] = './.flask_session/'
-app.config['SECRET_KEY'] = FLASK_SECRET_KEY  # Use a secure random key
+app.config['SECRET_KEY'] = FLASK_SECRET_KEY  # Use the secure random key from the config file
 
 # Initialize Session
 Session(app)
@@ -187,7 +187,7 @@ def create_zip(ext_user_username, semester_info, hw_number):
 
     elif hw_number == '2':
         random_number = generate_random_number(ext_user_username, semester_info, 2)
-    
+
         xlsx_key = f'{s3_src_dir}IS100_Assignment{hw_number}_Type{random_number}_Question.xlsx'
         txt_key = f'{s3_src_dir}IS100_Assignment{hw_number}_Type{random_number}_Data.txt'
         app.logger.info(f"Selected XLSX key: {xlsx_key}, TXT key: {txt_key}")
@@ -209,7 +209,7 @@ def create_zip(ext_user_username, semester_info, hw_number):
 
             with io.BytesIO() as txt_data:
                 s3_client.download_fileobj(S3_BUCKET, txt_dst_key, txt_data)
-                txt_data.seek(0)
+                txt_data.seek 0
                 zipf.writestr(f'IS100_Assignment{hw_number}_Data.txt', txt_data.read())
 
             app.logger.info(f"Created ZIP file with {modified_xlsx_key} and {txt_dst_key}")
@@ -241,7 +241,7 @@ def initiate_download():
 
     if not hw_number:
         return jsonify({"error": "Assignment number not correctly provided"}), 400
-    
+
     # Extract username from the form data
     ext_user_username = request.form.get('ext_user_username')
 
@@ -268,7 +268,7 @@ def initiate_download():
     except Exception as e:
         app.logger.error(f"Error creating zip file: {str(e)}")
         return jsonify({"error": str(e)}), 500
-    
+
     html_content = f'''
     <!DOCTYPE html>
     <html lang="en">
@@ -281,7 +281,7 @@ def initiate_download():
             function initiateDownload() {{
                 var downloadUrl = "/download-file?token={token}";
                 window.location.href = downloadUrl;
-                
+
                 setTimeout(function() {{
                     if (window.history.length > 1) {{
                         window.history.back();
@@ -316,7 +316,7 @@ def download_file():
     if token_uses >= 3:
         app.logger.error("Too many downloads.")
         raise ValueError("Unauthorized access or too many downloads")
-    
+
     session['token_uses'] = token_uses + 1
 
     s3_output_key = session.get('filename')
@@ -331,6 +331,6 @@ def download_file():
     )
 
     delete_s3_folder(S3_BUCKET, 'temp/')
-    
+
     app.logger.info(f"Presigned URL generated for {s3_output_key}")
     return redirect(response)
