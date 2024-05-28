@@ -5,7 +5,7 @@ from flask_session import Session
 from datetime import datetime, timedelta
 from openpyxl.styles import Font
 from cryptography.fernet import Fernet
-from keys.config import FLASK_SECRET_KEY, ENCRYPTION_SECRET_KEY, HIDDEN_INFO_CELL
+#from keys.config import FLASK_SECRET_KEY, ENCRYPTION_SECRET_KEY, HIDDEN_INFO_CELL
 
 app = Flask(__name__)
 
@@ -64,7 +64,7 @@ def encrypt_text(text, key):
 
 def generate_encrypted_info(ext_user_username, semester_info):
     combined_info = ext_user_username[1:] + semester_info
-    encrypted_info = encrypt_text(combined_info, 'IS100') #ENCRYPTION_SECRET_KEY
+    encrypted_info = encrypt_text(combined_info, 'IS100') #ENCRYPTION_SECRET_KEY)
     return encrypted_info
 
 def embed_hidden_info_docx(docx_key, ext_user_username, semester_info, new_docx_key):
