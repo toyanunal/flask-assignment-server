@@ -67,86 +67,72 @@ def generate_encrypted_info(ext_user_username, semester_info):
     encrypted_info = encrypt_text(combined_info, ENCRYPTION_SECRET_KEY)
     return encrypted_info
 
-def embed_hidden_info_docx(docx_key, ext_user_username, semester_info, new_docx_key):
-    app.logger.info(f"Embedding hidden info in DOCX file {docx_key}")
+def embed_hidden_info(file_key, ext_user_username, semester_info, new_file_key, hw_number):
+    app.logger.info(f"Embedding hidden info in {'DOCX' if hw_number == 1 else 'XLSX'} file {file_key}")
 
-    # Download the DOCX file to an in-memory file
-    docx_obj = io.BytesIO()
-    s3_client.download_fileobj(S3_BUCKET, docx_key, docx_obj)
-    docx_obj.seek(0)
+    # Download the file to an in-memory file
+    file_obj = io.BytesIO()
+    s3_client.download_fileobj(S3_BUCKET, file_key, file_obj)
+    file_obj.seek(0)
 
-    # Extract the contents of the DOCX file to an in-memory zip
-    with zipfile.ZipFile(docx_obj, 'r') as zip_ref:
+    # Extract the contents of the file to an in-memory zip
+    with zipfile.ZipFile(file_obj, 'r') as zip_ref:
         temp_dir = {name: zip_ref.read(name) for name in zip_ref.namelist()}
 
     # Generate the encrypted information
     encrypted_info = generate_encrypted_info(ext_user_username, semester_info)
     app.logger.info(f"Generated encrypted info: {encrypted_info}")
 
-    # Create an in-memory file from the customXml/item1.xml
-    xml_obj = io.BytesIO(temp_dir['customXml/item1.xml'])
-    tree = etree.parse(xml_obj)
-    root = tree.getroot()
+    if hw_number == 1:
+        # DOCX specific logic
+        # Create an in-memory file from the customXml/item1.xml
+        xml_obj = io.BytesIO(temp_dir['customXml/item1.xml'])
+        tree = etree.parse(xml_obj)
+        root = tree.getroot()
 
-    # Add hiddenKey and hiddenInfo elements to the XML
-    hidden_key = etree.Element('hiddenKey')
-    hidden_key.text = encrypted_info
-    hidden_info = etree.Element('hiddenInfo')
-    hidden_info.text = f"{ext_user_username},{semester_info}"
-    root.append(hidden_key)
-    root.append(hidden_info)
+        # Add hiddenKey and hiddenInfo elements to the XML
+        hidden_key = etree.Element('hiddenKey')
+        hidden_key.text = encrypted_info
+        hidden_info = etree.Element('hiddenInfo')
+        hidden_info.text = f"{ext_user_username},{semester_info}"
+        root.append(hidden_key)
+        root.append(hidden_info)
 
-    # Write the modified XML to a new in-memory file
-    xml_obj = io.BytesIO()
-    tree.write(xml_obj, xml_declaration=True, encoding='UTF-8')
-    xml_obj.seek(0)
-    temp_dir['customXml/item1.xml'] = xml_obj.read()
+        # Write the modified XML to a new in-memory file
+        xml_obj = io.BytesIO()
+        tree.write(xml_obj, xml_declaration=True, encoding='UTF-8')
+        xml_obj.seek(0)
+        temp_dir['customXml/item1.xml'] = xml_obj.read()
 
-    # Create a new DOCX file in-memory with the modified contents
-    new_docx_obj = io.BytesIO()
-    with zipfile.ZipFile(new_docx_obj, 'w') as zip_ref:
-        for name, data in temp_dir.items():
-            zip_ref.writestr(name, data)
-    new_docx_obj.seek(0)
+        # Create a new DOCX file in-memory with the modified contents
+        new_file_obj = io.BytesIO()
+        with zipfile.ZipFile(new_file_obj, 'w') as zip_ref:
+            for name, data in temp_dir.items():
+                zip_ref.writestr(name, data)
+        new_file_obj.seek(0)
+
+    elif hw_number == 2:
+        # XLSX specific logic
+        # Load the workbook and create a hidden worksheet
+        workbook = openpyxl.load_workbook(file_obj)
+        hidden_sheet = workbook.create_sheet(title="(null)")
+        hidden_sheet.sheet_state = 'hidden'
+
+        # Update the hidden worksheet accordingly
+        cell = HIDDEN_INFO_CELL
+        hidden_sheet[cell] = encrypted_info
+        hidden_sheet[cell].font = Font(color="FFFFFF")
+
+        # Save the workbook to a new in-memory file
+        new_file_obj = io.BytesIO()
+        workbook.save(new_file_obj)
+        new_file_obj.seek(0)
 
     # Upload the modified DOCX file to S3
-    s3_client.upload_fileobj(new_docx_obj, S3_BUCKET, new_docx_key)
-    app.logger.info(f"Uploaded modified DOCX to {new_docx_key}")
+    s3_client.upload_fileobj(new_file_obj, S3_BUCKET, new_file_key)
+    app.logger.info(f"Uploaded modified {'DOCX' if hw_number == 1 else 'XLSX'} file to {new_file_key}")
 
-    return new_docx_key
-
-def embed_hidden_info_xlsx(xlsx_key, ext_user_username, semester_info, new_xlsx_key):
-    app.logger.info(f"Embedding hidden info in XLSX file {xlsx_key}")
-
-    # Download the XLSX file to an in-memory file
-    xlsx_obj = io.BytesIO()
-    s3_client.download_fileobj(S3_BUCKET, xlsx_key, xlsx_obj)
-    xlsx_obj.seek(0)
-
-    # Load the workbook and create a hidden worksheet
-    workbook = openpyxl.load_workbook(xlsx_obj)
-    hidden_sheet = workbook.create_sheet(title="(null)")
-    hidden_sheet.sheet_state = 'hidden'
-
-    # Generate the encrypted information
-    encrypted_info = generate_encrypted_info(ext_user_username, semester_info)
-    app.logger.info(f"Generated encrypted info: {encrypted_info}")
-
-    # Update the hidden worksheet accordingly
-    cell = HIDDEN_INFO_CELL
-    hidden_sheet[cell] = encrypted_info
-    hidden_sheet[cell].font = Font(color="FFFFFF")
-
-    # Save the workbook to a new in-memory file
-    new_xlsx_obj = io.BytesIO()
-    workbook.save(new_xlsx_obj)
-    new_xlsx_obj.seek(0)
-
-    # Upload the modified XLSX file to S3
-    s3_client.upload_fileobj(new_xlsx_obj, S3_BUCKET, new_xlsx_key)
-    app.logger.info(f"Uploaded modified XLSX to {new_xlsx_key}")
-
-    return new_xlsx_key
+    return new_file_key
 
 def create_zip(ext_user_username, semester_info, hw_number):
     # Define the S3 source and destination directories
