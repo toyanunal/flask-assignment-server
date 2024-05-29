@@ -5,14 +5,18 @@ from flask_session import Session
 from datetime import datetime, timedelta
 from openpyxl.styles import Font
 from cryptography.fernet import Fernet
-from keys.config import FLASK_SECRET_KEY, ENCRYPTION_SECRET_KEY, HIDDEN_INFO_CELL
+
+# Read secret keys from environment variables
+FLASK_SECRET_KEY = os.environ.get('FLASK_SECRET_KEY')
+ENCRYPTION_SECRET_KEY = os.environ.get('ENCRYPTION_SECRET_KEY')
+HIDDEN_INFO_CELL = os.environ.get('HIDDEN_INFO_CELL')
 
 app = Flask(__name__)
 
 # Configure session to use filesystem (not default, which uses signed cookies)
 app.config['SESSION_TYPE'] = 'filesystem'
 app.config['SESSION_FILE_DIR'] = './.flask_session/'
-app.config['SECRET_KEY'] = FLASK_SECRET_KEY  # Use the secure random key from the config file
+app.config['SECRET_KEY'] = FLASK_SECRET_KEY
 
 # Initialize Session
 Session(app)
