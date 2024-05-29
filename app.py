@@ -1,4 +1,4 @@
-import zipfile, os, random, hashlib, re, secrets, boto3, logging, io, openpyxl, base64
+import zipfile, os, random, hashlib, re, secrets, boto3, logging, io, openpyxl
 from lxml import etree
 from flask import Flask, session, request, jsonify, render_template_string, redirect
 from flask_session import Session
