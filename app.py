@@ -158,7 +158,7 @@ def create_zip(ext_user_username, semester_info, hw_number):
         copy_file_in_s3(S3_BUCKET, pdf_key, pdf_dst_key)
 
         new_docx_key = f'{output_dir}IS100_Assignment{hw_number}_{ext_user_username[1:]}.docx'
-        modified_docx_key = embed_hidden_info_docx(doc_dst_key, ext_user_username, semester_info, new_docx_key)
+        modified_docx_key = embed_hidden_info(doc_dst_key, ext_user_username, semester_info, new_docx_key, hw_number)
 
         zip_buffer = io.BytesIO()
         with zipfile.ZipFile(zip_buffer, 'w') as zipf:
@@ -188,7 +188,7 @@ def create_zip(ext_user_username, semester_info, hw_number):
         copy_file_in_s3(S3_BUCKET, txt_key, txt_dst_key)
 
         new_xlsx_key = f'{output_dir}IS100_Assignment{hw_number}_{ext_user_username[1:]}.xlsx'
-        modified_xlsx_key = embed_hidden_info_xlsx(xlsx_dst_key, ext_user_username, semester_info, new_xlsx_key)
+        modified_xlsx_key = embed_hidden_info(xlsx_dst_key, ext_user_username, semester_info, new_xlsx_key, hw_number)
 
         zip_buffer = io.BytesIO()
         with zipfile.ZipFile(zip_buffer, 'w') as zipf:
