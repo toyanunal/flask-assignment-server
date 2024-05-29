@@ -68,7 +68,7 @@ def generate_encrypted_info(ext_user_username, semester_info):
     return encrypted_info
 
 def embed_hidden_info(file_key, ext_user_username, semester_info, new_file_key, hw_number):
-    app.logger.info(f"Embedding hidden info in {'DOCX' if hw_number == 1 else 'XLSX'} file {file_key}")
+    app.logger.info(f"Embedding hidden info in {'DOCX' if hw_number == '1' else 'XLSX'} file {file_key}")
 
     # Download the file to an in-memory file
     file_obj = io.BytesIO()
@@ -83,7 +83,7 @@ def embed_hidden_info(file_key, ext_user_username, semester_info, new_file_key, 
     encrypted_info = generate_encrypted_info(ext_user_username, semester_info)
     app.logger.info(f"Generated encrypted info: {encrypted_info}")
 
-    if hw_number == 1:
+    if hw_number == '1':
         # DOCX specific logic
         # Create an in-memory file from the customXml/item1.xml
         xml_obj = io.BytesIO(temp_dir['customXml/item1.xml'])
@@ -111,7 +111,7 @@ def embed_hidden_info(file_key, ext_user_username, semester_info, new_file_key, 
                 zip_ref.writestr(name, data)
         new_file_obj.seek(0)
 
-    elif hw_number == 2:
+    elif hw_number == '2':
         # XLSX specific logic
         # Load the workbook and create a hidden worksheet
         workbook = openpyxl.load_workbook(file_obj)
@@ -130,7 +130,7 @@ def embed_hidden_info(file_key, ext_user_username, semester_info, new_file_key, 
 
     # Upload the modified DOCX file to S3
     s3_client.upload_fileobj(new_file_obj, S3_BUCKET, new_file_key)
-    app.logger.info(f"Uploaded modified {'DOCX' if hw_number == 1 else 'XLSX'} file to {new_file_key}")
+    app.logger.info(f"Uploaded modified {'DOCX' if hw_number == '1' else 'XLSX'} file to {new_file_key}")
 
     return new_file_key
 
